@@ -20,6 +20,28 @@
 - 最近 60 条 Web 监视记录保存在进程内存中
 - 监视器或字幕进程异常不会暂停 API 请求
 
+## v4 后端结构
+
+`app.py` 已缩减为应用创建和命令行启动入口，业务实现全部迁移到 `llm_relay_desk/` 包中：
+
+```text
+llm_relay_desk/
+├── application.py          FastAPI 应用装配与生命周期
+├── settings.py             环境变量、路径、版本和默认配置
+├── runtime.py              配置库、提示词、监视器和字幕控制器聚合
+├── api/
+│   ├── dependencies.py     路由依赖获取
+│   └── routes/             system/admin/monitor/openai/native 路由
+├── config/                 配置规范化与校验
+├── storage/                JSON 原子读写
+├── prompts/                提示词配置与请求注入
+├── monitoring/             请求事件、内存历史和 WebSocket 广播
+├── desktop/                原生字幕控制器与 Tk 窗口进程
+└── proxy/                  OpenAI/Ollama 转发、内容提取和流解析
+```
+
+模块依赖方向、扩展规范和职责边界见 [`docs/architecture.md`](docs/architecture.md)。根目录 `popup_window.py` 仅作为旧导入路径的兼容层。
+
 ## 原生字幕浮层
 
 字幕浮层由独立的 Python/Tk 进程运行：
@@ -115,6 +137,25 @@ python app.py
 安装依赖.bat
 启动WebUI.bat
 ```
+
+## 从 3.x 覆盖升级
+
+1. 先关闭正在运行的 `app.py`。
+2. 将 v4 压缩包内容直接覆盖到原项目根目录。
+3. 保留原有 `data/config.json`、`data/prompts.json` 和 `.env`。
+4. 重新运行 `安装依赖.bat` 或 `python -m pip install -r requirements.txt`。
+5. 启动后访问 `/health`，确认版本为 `4.0.0`。
+
+压缩包不包含运行期配置文件，因此不会覆盖 API Key、上游地址或提示词。旧的根目录 `popup_window.py` 会被替换为兼容层。
+
+## 开发与测试
+
+```cmd
+python -m pip install -r requirements-dev.txt
+pytest
+```
+
+当前测试覆盖配置校验、提示词注入、路由契约、静态页面、OpenAI SSE 和 Ollama NDJSON 转发。
 
 ## 页面地址
 

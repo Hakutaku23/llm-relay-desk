@@ -11,3 +11,9 @@ Thumbs.db
 data/*.tmp
 data/config.json
 data/prompts.json
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/

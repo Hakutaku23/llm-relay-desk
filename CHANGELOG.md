@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.0.0
+
+- 将 1388 行的单体 `app.py` 重构为 `llm_relay_desk` 分层包。
+- 按职责拆分系统、管理、监视、OpenAI 和 Ollama 路由。
+- 将配置校验、JSON 存储、提示词服务、事件监视、流解析和上游转发解耦。
+- 使用 `Runtime` 聚合运行期依赖，路由不再依赖模块级业务全局变量。
+- 使用 FastAPI lifespan 统一管理原生字幕进程启动与关闭。
+- 保留原有 API 路径、配置文件格式、静态页面和启动脚本。
+- 根目录 `popup_window.py` 调整为兼容导入层，实际实现迁移到 `desktop/window.py`。
+- 新增架构文档、`pyproject.toml`、开发依赖和自动化测试。
+- 新增 OpenAI SSE 与 Ollama NDJSON 端到端回归测试。
+
 ## 3.2.0
 
 - 将原生响应弹窗重构为无标题栏桌面字幕浮层。
