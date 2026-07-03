@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Relay Desk</title>
+  <link rel="stylesheet" href="/ui/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">R</div>
+        <div>
+          <h1>LLM Relay Desk</h1>
+          <p>API 转发与提示词管理</p>
+        </div>
+      </div>
+
+      <nav>
+        <button class="nav-item active" data-tab="status">服务状态</button>
+        <button class="nav-item" data-tab="config">转发配置</button>
+        <button class="nav-item" data-tab="prompts">提示词管理</button>
+        <button class="nav-item" data-tab="test">API 测试</button>
+        <a class="nav-item nav-link" href="/monitor/" target="_blank" rel="noopener">实时响应 ↗</a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="status-dot" id="sidebarDot"></div>
+        <span id="sidebarStatus">正在检查服务</span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h2 id="pageTitle">服务状态</h2>
+          <p id="pageSubtitle">检查本地代理、上游服务和实时监视器。</p>
+        </div>
+        <button class="secondary" id="refreshAllBtn">刷新</button>
+      </header>
+
+      <section class="tab-panel active" id="tab-status">
+        <div class="cards three">
+          <article class="metric-card">
+            <span>本地 OpenAI API</span>
+            <strong id="localApiValue">--</strong>
+            <small>第三方软件应连接此地址</small>
+          </article>
+          <article class="metric-card">
+            <span>上游 API</span>
+            <strong id="upstreamValue">--</strong>
+            <small>支持 Ollama 或 OpenAI 兼容服务</small>
+          </article>
+          <article class="metric-card">
+            <span>当前提示词</span>
+            <strong id="activePromptValue">--</strong>
+            <small id="promptLengthValue">--</small>
+          </article>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <h3>连接检测</h3>
+              <p>同时验证本地服务和上游模型列表接口。</p>
+            </div>
+            <button class="primary" id="testUpstreamBtn">测试上游连接</button>
+          </div>
+          <pre class="result" id="statusResult">等待测试。</pre>
+        </div>
+
+        <div class="panel">
+          <h3>推荐调用配置</h3>
+          <div class="code-grid">
+            <div>
+              <label>OpenAI Compatible Base URL</label>
+              <code id="recommendedBaseUrl">http://127.0.0.1:11434/v1</code>
+            </div>
+            <div>
+              <label>Ollama 原生 URL</label>
+              <code>http://127.0.0.1:11434</code>
+            </div>
+            <div>
+              <label>Model</label>
+              <code id="recommendedModel">qwen3.6:35b</code>
+            </div>
+            <div>
+              <label>API Key</label>
+              <code id="recommendedApiKey">--</code>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-config">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <h3>转发与模型配置</h3>
+              <p>保存后立即生效，无需重启本地代理。</p>
+            </div>
+            <button class="primary" id="saveConfigBtn">保存配置</button>
+          </div>
+
+          <div class="form-grid two">
+            <div class="field span-two">
+              <label for="upstreamBaseUrl">上游 OpenAI Base URL</label>
+              <input id="upstreamBaseUrl" placeholder="http://127.0.0.1:11435/v1">
+              <small>填写 Base URL，不要填写完整的 /chat/completions。</small>
+            </div>
+            <div class="field">
+              <label for="upstreamApiKey">上游 API Key</label>
+              <input id="upstreamApiKey" type="password" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="localApiKey">本地代理 API Key</label>
+              <input id="localApiKey" type="password" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="defaultModel">默认模型</label>
+              <input id="defaultModel" placeholder="qwen3.6:35b">
+            </div>
+            <div class="field">
+              <label>思考参数策略</label>
+              <input value="完全透传，不自动添加 reasoning_effort / think" readonly>
+              <small>客户端未设置时，由 Ollama 和模型默认行为决定。</small>
+            </div>
+            <div class="field">
+              <label for="requestTimeout">请求超时（秒）</label>
+              <input id="requestTimeout" type="number" min="30" max="7200">
+            </div>
+            <div class="field switch-field">
+              <label>提示词注入</label>
+              <label class="switch">
+                <input id="promptEnabled" type="checkbox">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="notice">
+            本地监听端口由 <code>.env</code> 中的 <code>APP_PORT</code> 决定，
+            修改后需要重启；上游转发端口可在此页面实时修改。
+          </div>
+          <pre class="result compact" id="configResult">尚未保存。</pre>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-prompts">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <h3>提示词配置集</h3>
+              <p>保存、加载、启用、导入和导出多个系统提示词。</p>
+            </div>
+            <div class="actions">
+              <button class="secondary" id="importPromptBtn">导入 TXT</button>
+              <button class="secondary" id="exportPromptBtn">导出 TXT</button>
+              <input type="file" id="promptFileInput" accept=".txt,text/plain" hidden>
+            </div>
+          </div>
+
+          <div class="prompt-toolbar">
+            <select id="promptSelect"></select>
+            <input id="promptName" placeholder="提示词名称">
+            <button class="primary" id="savePromptBtn">保存</button>
+            <button class="success" id="activatePromptBtn">设为当前</button>
+            <button class="danger" id="deletePromptBtn">删除</button>
+          </div>
+
+          <div class="active-banner" id="activePromptBanner">当前启用：--</div>
+
+          <textarea
+            id="promptContent"
+            class="prompt-editor"
+            spellcheck="false"
+            placeholder="在此输入系统提示词..."
+          ></textarea>
+
+          <div class="editor-footer">
+            <span id="promptStats">0 字符</span>
+            <span>保存后立即可加载；“设为当前”后立即用于后续请求。</span>
+          </div>
+          <pre class="result compact" id="promptResult">等待操作。</pre>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-test">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <h3>API 与提示词测试</h3>
+              <p>请求会经过当前代理，并自动注入已启用的系统提示词。</p>
+            </div>
+            <button class="primary" id="sendTestBtn">发送测试</button>
+          </div>
+
+          <div class="form-grid two">
+            <div class="field">
+              <label for="testModel">模型</label>
+              <input id="testModel">
+            </div>
+            <div class="field">
+              <label for="testMaxTokens">最大输出 Token</label>
+              <input id="testMaxTokens" type="number" min="1" max="32768" value="512">
+            </div>
+            <div class="field span-two">
+              <label for="testMessage">用户消息</label>
+              <textarea id="testMessage" class="message-editor">提示词测试码是什么？只输出测试码。</textarea>
+            </div>
+          </div>
+
+          <div class="test-output">
+            <div>
+              <label>最终回答</label>
+              <pre class="result tall" id="testAnswer">等待请求。</pre>
+            </div>
+            <div>
+              <label>完整响应</label>
+              <pre class="result tall" id="testRaw">等待请求。</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div id="toast" class="toast"></div>
+    </main>
+  </div>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>

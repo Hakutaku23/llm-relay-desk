@@ -1,0 +1,9 @@
+{
+  "upstream_base_url": "http://127.0.0.1:11435/v1",
+  "upstream_api_key": "ollama",
+  "local_api_key": "sk-local-ollama-change-me",
+  "default_model": "qwen3.6:27b",
+  "default_reasoning_effort": "",
+  "request_timeout_seconds": 600,
+  "prompt_enabled": true
+}

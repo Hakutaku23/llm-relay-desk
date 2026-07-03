@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>实时响应 · LLM Relay Desk</title>
+  <link rel="stylesheet" href="/monitor/styles.css">
+</head>
+<body>
+  <div class="monitor-shell">
+    <header class="monitor-header">
+      <div class="brand-row">
+        <div class="logo">R</div>
+        <div>
+          <h1>实时响应</h1>
+          <p>旁路显示经过本地代理的 OpenAI 与 Ollama 回复</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="connection-pill connecting" id="connectionPill">
+          <i></i><span id="connectionText">正在连接</span>
+        </span>
+        <label class="check-control">
+          <input type="checkbox" id="autoSelect" checked>
+          <span>跟随新请求</span>
+        </label>
+        <label class="check-control">
+          <input type="checkbox" id="autoScroll" checked>
+          <span>自动滚动</span>
+        </label>
+        <button class="button secondary" id="copyBtn">复制回答</button>
+        <button class="button danger" id="clearBtn">清空记录</button>
+        <a class="button secondary" href="/ui/" target="_blank" rel="noopener">管理界面</a>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="request-panel">
+        <div class="panel-title">
+          <div>
+            <strong>请求记录</strong>
+            <span id="requestCount">0 条</span>
+          </div>
+          <button class="icon-button" id="reconnectBtn" title="重新连接">↻</button>
+        </div>
+        <div class="request-list" id="requestList">
+          <div class="empty-list">等待 API 请求。</div>
+        </div>
+      </aside>
+
+      <section class="response-panel">
+        <div class="response-head">
+          <div>
+            <div class="title-line">
+              <h2 id="modelName">尚无请求</h2>
+              <span class="status-badge idle" id="requestStatus">空闲</span>
+            </div>
+            <div class="metadata" id="requestMetadata">
+              打开此窗口后，其他程序调用本地 API 不会被暂停或最小化。
+            </div>
+          </div>
+          <code class="request-id" id="requestId">--</code>
+        </div>
+
+        <details class="reasoning-card" id="reasoningCard">
+          <summary>
+            <span>推理内容</span>
+            <small id="reasoningStats">0 字符</small>
+          </summary>
+          <div class="stream-scroll compact-scroll" id="reasoningScroll">
+            <pre class="stream-text reasoning-text" id="reasoningText">当前请求没有推理内容。</pre>
+          </div>
+        </details>
+
+        <div class="answer-card">
+          <div class="card-label">
+            <div>
+              <span>最终回答</span>
+              <small id="answerStats">0 字符</small>
+            </div>
+            <span class="stream-indicator" id="streamIndicator"><i></i>等待</span>
+          </div>
+          <div class="stream-scroll" id="answerScroll">
+            <pre class="stream-text" id="answerText">等待模型响应。</pre>
+            <span class="cursor" id="streamCursor" hidden></span>
+          </div>
+        </div>
+
+        <div class="error-card" id="errorCard" hidden>
+          <strong>请求错误</strong>
+          <pre id="errorText"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/monitor/app.js"></script>
+</body>
+</html>
