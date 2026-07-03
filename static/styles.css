@@ -404,7 +404,7 @@ textarea { resize: vertical; }
 
 .color-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -438,6 +438,19 @@ textarea { resize: vertical; }
   background: #101318;
   color: #f7f8fa;
   transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+
+
+.subtitle-preview.transparent-mode {
+  background-color: transparent;
+  background-image:
+    linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
+    linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e5e7eb 75%),
+    linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  border-style: dashed;
 }
 
 .subtitle-preview small {

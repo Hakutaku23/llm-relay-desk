@@ -74,7 +74,8 @@ async function loadHealth() {
     } else if (health.native_popup_worker_alive) {
       $("nativePopupStatus").textContent = "字幕浮层运行中";
       const interaction = health.native_popup_click_through ? "鼠标穿透" : "可交互";
-      $("nativePopupDetail").textContent = `${interaction} · ${health.native_popup_position || "bottom_center"} · 完成后 ${health.native_popup_close_seconds} 秒关闭`;
+      const appearance = health.native_popup_transparent_background ? "透明背景" : "背景填充";
+      $("nativePopupDetail").textContent = `${interaction} · ${appearance} · ${health.native_popup_position || "bottom_center"} · 完成后 ${health.native_popup_close_seconds} 秒关闭`;
     } else {
       $("nativePopupStatus").textContent = "桌面窗口不可用";
       $("nativePopupDetail").textContent = "请检查 tkinter 或桌面会话";
@@ -135,10 +136,24 @@ async function saveConfig() {
 function updateSubtitleColorPreview() {
   const preview = $("subtitleColorPreview");
   if (!preview) return;
-  preview.style.background = $("nativePopupBackgroundColor").value;
+  const transparent = $("nativePopupTransparentBackground").checked;
+  const shadowEnabled = transparent && $("nativePopupTextShadow").checked;
+  const shadowOffset = Number($("nativePopupShadowOffset").value) || 2;
+  const shadow = shadowEnabled
+    ? `${shadowOffset}px ${shadowOffset}px 0 ${$("nativePopupShadowColor").value}`
+    : "none";
+
+  preview.classList.toggle("transparent-mode", transparent);
+  preview.style.backgroundColor = transparent
+    ? "transparent"
+    : $("nativePopupBackgroundColor").value;
   preview.style.color = $("nativePopupTextColor").value;
-  preview.style.borderColor = $("nativePopupBorderColor").value;
+  preview.style.borderColor = transparent
+    ? "transparent"
+    : $("nativePopupBorderColor").value;
   preview.querySelector("small").style.color = $("nativePopupMutedColor").value;
+  preview.querySelector("small").style.textShadow = shadow;
+  preview.querySelector("strong").style.textShadow = shadow;
 }
 
 async function loadSubtitleConfig() {
@@ -157,11 +172,15 @@ async function loadSubtitleConfig() {
   $("nativePopupOpacity").value = config.native_popup_opacity ?? 0.88;
   $("nativePopupShowReasoning").checked = Boolean(config.native_popup_show_reasoning);
   $("nativePopupClickThrough").checked = config.native_popup_click_through === true;
+  $("nativePopupTransparentBackground").checked = config.native_popup_transparent_background === true;
+  $("nativePopupTextShadow").checked = config.native_popup_text_shadow !== false;
+  $("nativePopupShadowOffset").value = config.native_popup_shadow_offset || 2;
   $("nativePopupBackgroundColor").value = config.native_popup_background_color || "#101318";
   $("nativePopupTextColor").value = config.native_popup_text_color || "#f7f8fa";
   $("nativePopupMutedColor").value = config.native_popup_muted_color || "#aeb6c2";
   $("nativePopupBorderColor").value = config.native_popup_border_color || "#343a46";
   $("nativePopupErrorColor").value = config.native_popup_error_color || "#ff8f9b";
+  $("nativePopupShadowColor").value = config.native_popup_shadow_color || "#000000";
   updateSubtitleColorPreview();
 }
 
@@ -180,11 +199,15 @@ function subtitlePayload() {
     native_popup_opacity: Number($("nativePopupOpacity").value),
     native_popup_show_reasoning: $("nativePopupShowReasoning").checked,
     native_popup_click_through: $("nativePopupClickThrough").checked,
+    native_popup_transparent_background: $("nativePopupTransparentBackground").checked,
+    native_popup_text_shadow: $("nativePopupTextShadow").checked,
+    native_popup_shadow_offset: Number($("nativePopupShadowOffset").value),
     native_popup_background_color: $("nativePopupBackgroundColor").value,
     native_popup_text_color: $("nativePopupTextColor").value,
     native_popup_muted_color: $("nativePopupMutedColor").value,
     native_popup_border_color: $("nativePopupBorderColor").value,
     native_popup_error_color: $("nativePopupErrorColor").value,
+    native_popup_shadow_color: $("nativePopupShadowColor").value,
   };
 }
 
@@ -683,6 +706,10 @@ $("promptFileInput").addEventListener("change", (event) => {
   "nativePopupMutedColor",
   "nativePopupBorderColor",
   "nativePopupErrorColor",
+  "nativePopupShadowColor",
+  "nativePopupShadowOffset",
+  "nativePopupTransparentBackground",
+  "nativePopupTextShadow",
 ].forEach((id) => $(id).addEventListener("input", updateSubtitleColorPreview));
 $("sendTestBtn").addEventListener("click", sendTest);
 

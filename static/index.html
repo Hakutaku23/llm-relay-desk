@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LLM Relay Desk</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=4.2.1">
+  <link rel="stylesheet" href="/ui/styles.css?v=4.3.0">
 </head>
 <body>
   <div class="shell">
@@ -248,6 +248,27 @@
               </label>
               <small>默认关闭，只显示“正在思考”，避免暴露 reasoning 文本。</small>
             </div>
+            <div class="field switch-field">
+              <label>无背景填充</label>
+              <label class="switch">
+                <input id="nativePopupTransparentBackground" type="checkbox">
+                <span class="slider"></span>
+              </label>
+              <small>Windows 下使用颜色键透明，仅保留字幕文字；定位模式和鼠标穿透仍可正常使用。</small>
+            </div>
+            <div class="field switch-field">
+              <label>透明模式文字阴影</label>
+              <label class="switch">
+                <input id="nativePopupTextShadow" type="checkbox" checked>
+                <span class="slider"></span>
+              </label>
+              <small>建议开启，避免白色或高亮画面导致字幕难以辨认。</small>
+            </div>
+            <div class="field">
+              <label>阴影偏移（像素）</label>
+              <input id="nativePopupShadowOffset" type="number" min="1" max="8" value="2">
+              <small>仅在“无背景填充”和文字阴影同时开启时生效。</small>
+            </div>
           </div>
         </div>
 
@@ -278,6 +299,10 @@
             <label class="color-field">
               <span>错误颜色</span>
               <input id="nativePopupErrorColor" type="color" value="#ff8f9b">
+            </label>
+            <label class="color-field">
+              <span>阴影颜色</span>
+              <input id="nativePopupShadowColor" type="color" value="#000000">
             </label>
           </div>
           <div class="subtitle-preview" id="subtitleColorPreview">
@@ -380,6 +405,6 @@
     </main>
   </div>
 
-  <script src="/ui/app.js?v=4.2.1"></script>
+  <script src="/ui/app.js?v=4.3.0"></script>
 </body>
 </html>

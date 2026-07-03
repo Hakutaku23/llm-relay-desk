@@ -145,6 +145,18 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
     updated["native_popup_click_through"] = bool(
         updated.get("native_popup_click_through", False)
     )
+    updated["native_popup_transparent_background"] = bool(
+        updated.get("native_popup_transparent_background", False)
+    )
+    updated["native_popup_text_shadow"] = bool(
+        updated.get("native_popup_text_shadow", True)
+    )
+    updated["native_popup_shadow_offset"] = _bounded_int(
+        updated, "native_popup_shadow_offset", 2, 1, 8, "字幕阴影偏移"
+    )
+    updated["native_popup_shadow_color"] = _hex_color(
+        updated, "native_popup_shadow_color", "#000000", "字幕阴影颜色"
+    )
     updated["native_popup_background_color"] = _hex_color(
         updated, "native_popup_background_color", "#101318", "字幕背景颜色"
     )

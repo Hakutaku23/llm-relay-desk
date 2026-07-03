@@ -24,6 +24,10 @@ DEFAULT_POPUP_CONFIG: dict[str, Any] = {
     "opacity": 0.88,
     "show_reasoning": False,
     "click_through": False,
+    "transparent_background": False,
+    "text_shadow": True,
+    "shadow_color": "#000000",
+    "shadow_offset": 2,
     "background_color": "#101318",
     "text_color": "#f7f8fa",
     "muted_color": "#aeb6c2",
@@ -89,6 +93,10 @@ def normalize_popup_config(value: dict[str, Any] | None) -> dict[str, Any]:
         "opacity": _float_value(source.get("opacity"), 0.88, 0.30, 1.0),
         "show_reasoning": bool(source.get("show_reasoning", False)),
         "click_through": bool(source.get("click_through", False)),
+        "transparent_background": bool(source.get("transparent_background", False)),
+        "text_shadow": bool(source.get("text_shadow", True)),
+        "shadow_color": _color_value(source.get("shadow_color"), "#000000"),
+        "shadow_offset": _int_value(source.get("shadow_offset"), 2, 1, 8),
         "background_color": _color_value(source.get("background_color"), "#101318"),
         "text_color": _color_value(source.get("text_color"), "#f7f8fa"),
         "muted_color": _color_value(source.get("muted_color"), "#aeb6c2"),
@@ -142,6 +150,11 @@ class SubtitleOverlay:
         self.positioning_mode = False
         self.click_through_applied = False
         self.interaction_after_id: str | None = None
+        self.transparency_after_id: str | None = None
+        self.transparent_background_applied = False
+        self.transparent_key = "#010203"
+        self.display_text = ""
+        self.display_tag: str | None = None
         self.window_visible = False
 
         self.window = tk.Toplevel(root)
@@ -190,22 +203,55 @@ class SubtitleOverlay:
         )
         self.close_button.pack(side="right")
 
-        self.text = tk.Text(
-            self.shell,
-            wrap="word",
-            relief="flat",
+        self.text_area = tk.Frame(self.shell, bd=0, highlightthickness=0)
+        self.text_area.pack(fill="both", expand=True)
+
+        text_options = {
+            "wrap": "word",
+            "relief": "flat",
+            "bd": 0,
+            "padx": 0,
+            "pady": 0,
+            "spacing1": 2,
+            "spacing3": 5,
+            "cursor": "fleur",
+            "takefocus": False,
+        }
+        self.text = tk.Text(self.text_area, **text_options)
+        self.text.configure(state="disabled")
+        self.text.place(x=0, y=0, relwidth=1, relheight=1)
+
+        self.canvas = tk.Canvas(
+            self.text_area,
             bd=0,
-            padx=0,
-            pady=0,
-            spacing1=2,
-            spacing3=5,
+            highlightthickness=0,
             cursor="fleur",
             takefocus=False,
         )
-        self.text.pack(fill="both", expand=True)
-        self.text.configure(state="disabled")
+        self.canvas_shadow_item = self.canvas.create_text(
+            0,
+            0,
+            anchor="nw",
+            justify="left",
+            text="",
+        )
+        self.canvas_text_item = self.canvas.create_text(
+            0,
+            0,
+            anchor="nw",
+            justify="left",
+            text="",
+        )
+        self.canvas.bind("<Configure>", self._on_canvas_configure, add="+")
 
-        for widget in (self.shell, self.header, self.status_label, self.text):
+        for widget in (
+            self.shell,
+            self.header,
+            self.status_label,
+            self.text_area,
+            self.canvas,
+            self.text,
+        ):
             widget.bind("<ButtonPress-1>", self._start_drag, add="+")
             widget.bind("<B1-Motion>", self._drag, add="+")
             widget.bind("<ButtonRelease-1>", self._finish_drag, add="+")
@@ -216,6 +262,7 @@ class SubtitleOverlay:
     def reset(self, event: dict[str, Any]) -> None:
         self._cancel_auto_close()
         self._cancel_interaction_apply()
+        self._cancel_transparency_apply()
         # Remove the pass-through style before repainting. Applying
         # WS_EX_TRANSPARENT while Tk is still creating or updating its child
         # controls can leave the layered window unpainted on some Windows builds.
@@ -232,32 +279,60 @@ class SubtitleOverlay:
         self._show_without_stealing_focus()
         self.window_visible = True
         self._force_redraw()
-        self._schedule_interaction_state()
+        self._schedule_transparency_state(delay_ms=40)
+        self._schedule_interaction_state(delay_ms=120)
 
     def apply_config(self, *, apply_interaction: bool = True) -> None:
         config = self._popup_config()
+        transparent = bool(
+            config["transparent_background"]
+            and sys.platform == "win32"
+            and self.window_visible
+        )
+        self._apply_visual_config(config, transparent=transparent)
+        self._position_window(config)
+        if self.window_visible:
+            self._schedule_transparency_state()
+        if apply_interaction:
+            self._schedule_interaction_state(delay_ms=100)
+
+    def _apply_visual_config(
+        self,
+        config: dict[str, Any],
+        *,
+        transparent: bool,
+    ) -> None:
         bg = config["background_color"]
         text_color = config["text_color"]
         muted = config["muted_color"]
         border = config["border_color"]
         error = config["error_color"]
+        paint_bg = self.transparent_key if transparent else bg
 
         try:
             self.window.attributes("-alpha", config["opacity"])
         except tk.TclError:
             pass
-        self.window.configure(bg=bg)
-        self.shell.configure(bg=bg, highlightbackground=border, highlightthickness=1)
-        self.header.configure(bg=bg)
-        self.status_label.configure(bg=bg, fg=muted)
+
+        self.window.configure(bg=paint_bg)
+        self.shell.configure(
+            bg=paint_bg,
+            highlightbackground=paint_bg if transparent else border,
+            highlightthickness=0 if transparent else 1,
+            padx=8 if transparent else 18,
+            pady=4 if transparent else 12,
+        )
+        self.header.configure(bg=paint_bg)
+        self.text_area.configure(bg=paint_bg)
+        self.status_label.configure(bg=paint_bg, fg=muted)
         self.close_button.configure(
-            bg=bg,
+            bg=paint_bg,
             fg=muted,
-            activebackground=bg,
+            activebackground=paint_bg,
             activeforeground=text_color,
         )
         self.text.configure(
-            bg=bg,
+            bg=paint_bg,
             fg=text_color,
             insertbackground=text_color,
             selectbackground=border,
@@ -265,10 +340,64 @@ class SubtitleOverlay:
         )
         self.text.tag_configure("reasoning", foreground=muted)
         self.text.tag_configure("error", foreground=error)
-        self.interaction_label.configure(bg=bg, fg=text_color)
-        self._position_window(config)
-        if apply_interaction:
-            self._schedule_interaction_state()
+        self.interaction_label.configure(bg=paint_bg, fg=text_color)
+
+        display_color = (
+            error
+            if self.display_tag == "error"
+            else muted
+            if self.display_tag == "reasoning"
+            else text_color
+        )
+        self.canvas.configure(bg=paint_bg)
+        self.canvas.itemconfigure(
+            self.canvas_text_item,
+            fill=display_color,
+            font=(FONT_FAMILY, config["font_size"]),
+        )
+        self.canvas.itemconfigure(
+            self.canvas_shadow_item,
+            fill=config["shadow_color"],
+            font=(FONT_FAMILY, config["font_size"]),
+            state="normal" if config["text_shadow"] else "hidden",
+        )
+
+        if transparent:
+            self.text.place_forget()
+            self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
+        else:
+            self.canvas.place_forget()
+            self.text.place(x=0, y=0, relwidth=1, relheight=1)
+        self._render_canvas_text(config)
+
+    def _on_canvas_configure(self, _: tk.Event) -> None:
+        self._render_canvas_text(self._popup_config())
+
+    def _render_canvas_text(self, config: dict[str, Any] | None = None) -> None:
+        config = config or self._popup_config()
+        try:
+            width = max(20, int(self.canvas.winfo_width()) - 4)
+            height = max(20, int(self.canvas.winfo_height()) - 4)
+            self.canvas.itemconfigure(
+                self.canvas_text_item,
+                text=self.display_text,
+                width=width,
+            )
+            self.canvas.itemconfigure(
+                self.canvas_shadow_item,
+                text=self.display_text,
+                width=width,
+                state="normal" if config["text_shadow"] else "hidden",
+            )
+            self.canvas.update_idletasks()
+            bbox = self.canvas.bbox(self.canvas_text_item)
+            text_height = (bbox[3] - bbox[1]) if bbox else 0
+            y = min(0, height - text_height)
+            offset = int(config["shadow_offset"])
+            self.canvas.coords(self.canvas_text_item, 0, y)
+            self.canvas.coords(self.canvas_shadow_item, offset, y + offset)
+        except tk.TclError:
+            pass
 
     def _position_window(self, config: dict[str, Any]) -> None:
         width = int(config["width"])
@@ -343,6 +472,56 @@ class SubtitleOverlay:
             self._force_redraw()
         else:
             self._schedule_interaction_state()
+
+    def _cancel_transparency_apply(self) -> None:
+        if self.transparency_after_id is None:
+            return
+        try:
+            self.window.after_cancel(self.transparency_after_id)
+        except tk.TclError:
+            pass
+        self.transparency_after_id = None
+
+    def _schedule_transparency_state(self, delay_ms: int = 20) -> None:
+        self._cancel_transparency_apply()
+        try:
+            self.transparency_after_id = self.window.after(
+                max(0, int(delay_ms)),
+                self._apply_scheduled_transparency_state,
+            )
+        except tk.TclError:
+            self.transparency_after_id = None
+
+    def _apply_scheduled_transparency_state(self) -> None:
+        self.transparency_after_id = None
+        config = self._popup_config()
+        enabled = bool(config["transparent_background"] and sys.platform == "win32")
+        if enabled:
+            self._apply_visual_config(config, transparent=True)
+            self._force_redraw()
+            self._set_transparent_background(True)
+        else:
+            self._set_transparent_background(False)
+            self._apply_visual_config(config, transparent=False)
+        self._force_redraw()
+
+    def _set_transparent_background(self, enabled: bool) -> None:
+        """Apply a Windows color-key transparency after the first window paint."""
+
+        if sys.platform != "win32":
+            self.transparent_background_applied = False
+            return
+        try:
+            self.window.attributes(
+                "-transparentcolor",
+                self.transparent_key if enabled else "",
+            )
+            self.transparent_background_applied = bool(enabled)
+        except tk.TclError:
+            # Some Tk builds do not expose -transparentcolor. Keep the normal
+            # filled background rather than showing the color-key fill.
+            self.transparent_background_applied = False
+            self._apply_visual_config(self._popup_config(), transparent=False)
 
     def _cancel_interaction_apply(self) -> None:
         if self.interaction_after_id is None:
@@ -505,7 +684,14 @@ class SubtitleOverlay:
         click_through = self.click_through_applied
 
         cursor = "fleur" if not click_through else "arrow"
-        for widget in (self.shell, self.header, self.status_label, self.text):
+        for widget in (
+            self.shell,
+            self.header,
+            self.status_label,
+            self.text_area,
+            self.canvas,
+            self.text,
+        ):
             try:
                 widget.configure(cursor=cursor)
             except tk.TclError:
@@ -570,6 +756,8 @@ class SubtitleOverlay:
         self.window_visible = True
 
     def _replace_text(self, text: str, tag: str | None = None) -> None:
+        self.display_text = text
+        self.display_tag = tag
         self.text.configure(state="normal")
         self.text.delete("1.0", "end")
         if tag:
@@ -578,11 +766,21 @@ class SubtitleOverlay:
             self.text.insert("end", text)
         self.text.see("end")
         self.text.configure(state="disabled")
+        self._apply_visual_config(
+            self._popup_config(),
+            transparent=bool(
+                self._popup_config()["transparent_background"]
+                and sys.platform == "win32"
+                and self.window_visible
+            ),
+        )
         self._force_redraw()
 
     def _append_text(self, text: str, tag: str | None = None) -> None:
         if not text:
             return
+        self.display_tag = tag
+        self.display_text = (self.display_text + text)[-DISPLAY_CHAR_LIMIT:]
         self.text.configure(state="normal")
         if tag:
             self.text.insert("end", text, tag)
@@ -594,6 +792,14 @@ class SubtitleOverlay:
             self.text.delete("1.0", f"1.0+{remove_chars}c")
         self.text.see("end")
         self.text.configure(state="disabled")
+        self._apply_visual_config(
+            self._popup_config(),
+            transparent=bool(
+                self._popup_config()["transparent_background"]
+                and sys.platform == "win32"
+                and self.window_visible
+            ),
+        )
         self._force_redraw()
 
     def append_content(self, text: str) -> None:
@@ -688,6 +894,7 @@ class SubtitleOverlay:
         request_id = self.request_id
         self._cancel_auto_close()
         self._cancel_interaction_apply()
+        self._cancel_transparency_apply()
         self.window_visible = False
         try:
             self.window.destroy()

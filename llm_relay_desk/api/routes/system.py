@@ -50,5 +50,8 @@ async def health(request: Request) -> dict[str, Any]:
         "native_popup_click_through": config.get(
             "native_popup_click_through", False
         ),
+        "native_popup_transparent_background": config.get(
+            "native_popup_transparent_background", False
+        ),
         "native_popup_worker_alive": runtime.popup.is_alive(),
     }

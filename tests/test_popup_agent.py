@@ -211,5 +211,20 @@ def test_runtime_migrates_420_click_through_to_safe_default(tmp_path: Path) -> N
     )
     runtime = Runtime.create(settings)
     config = runtime.config_store.read()
-    assert config["config_schema_version"] == 2
+    assert config["config_schema_version"] == 3
     assert config["native_popup_click_through"] is False
+
+
+def test_popup_config_normalizes_transparent_background_settings() -> None:
+    config = popup_window.normalize_popup_config(
+        {
+            "transparent_background": True,
+            "text_shadow": False,
+            "shadow_color": "#ABCDEF",
+            "shadow_offset": 99,
+        }
+    )
+    assert config["transparent_background"] is True
+    assert config["text_shadow"] is False
+    assert config["shadow_color"] == "#abcdef"
+    assert config["shadow_offset"] == 8

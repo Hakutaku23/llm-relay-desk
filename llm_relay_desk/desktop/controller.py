@@ -53,6 +53,12 @@ class NativePopupController:
             "opacity": float(config.get("native_popup_opacity", 0.88)),
             "show_reasoning": bool(config.get("native_popup_show_reasoning", False)),
             "click_through": bool(config.get("native_popup_click_through", False)),
+            "transparent_background": bool(
+                config.get("native_popup_transparent_background", False)
+            ),
+            "text_shadow": bool(config.get("native_popup_text_shadow", True)),
+            "shadow_color": str(config.get("native_popup_shadow_color", "#000000")),
+            "shadow_offset": int(config.get("native_popup_shadow_offset", 2)),
             "background_color": str(
                 config.get("native_popup_background_color", "#101318")
             ),
