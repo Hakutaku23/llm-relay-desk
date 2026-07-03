@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from llm_relay_desk.config import validate_config
-from llm_relay_desk.settings import DEFAULT_CONFIG
+from llm_relay_desk.settings import CONFIG_SCHEMA_VERSION, DEFAULT_CONFIG
 from llm_relay_desk.storage import JsonStore
 
 
@@ -41,11 +41,13 @@ def test_validate_config_accepts_custom_position_and_colors(tmp_path: Path) -> N
             "native_popup_custom_y": 160,
             "native_popup_background_color": "#AABBCC",
             "native_popup_text_color": "#001122",
+            "native_popup_click_through": False,
         },
     )
     assert result["native_popup_position"] == "custom"
     assert result["native_popup_custom_x"] == -220
     assert result["native_popup_background_color"] == "#aabbcc"
+    assert result["native_popup_click_through"] is False
 
 
 def test_validate_config_rejects_invalid_color(tmp_path: Path) -> None:
@@ -53,3 +55,8 @@ def test_validate_config_rejects_invalid_color(tmp_path: Path) -> None:
     with pytest.raises(HTTPException) as exc_info:
         validate_config(store, {"native_popup_text_color": "white"})
     assert exc_info.value.status_code == 400
+
+
+def test_click_through_safe_default_is_disabled() -> None:
+    assert DEFAULT_CONFIG["native_popup_click_through"] is False
+    assert DEFAULT_CONFIG["config_schema_version"] == CONFIG_SCHEMA_VERSION

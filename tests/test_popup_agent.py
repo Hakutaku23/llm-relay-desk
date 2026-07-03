@@ -10,13 +10,20 @@ from llm_relay_desk.settings import Settings
 
 
 class FakeRoot:
+    def __init__(self) -> None:
+        self.after_calls: list[tuple[Any, ...]] = []
+
     def withdraw(self) -> None:
         pass
 
     def title(self, _: str) -> None:
         pass
 
-    def after(self, *_: Any) -> None:
+    def after(self, *args: Any) -> str:
+        self.after_calls.append(args)
+        return f"after-{len(self.after_calls)}"
+
+    def after_cancel(self, _: str) -> None:
         pass
 
     def mainloop(self) -> None:
@@ -28,6 +35,7 @@ class FakeRoot:
 
 class FakePopup:
     instances = 0
+    initial_configs: list[dict[str, Any]] = []
 
     def __init__(
         self,
@@ -37,8 +45,9 @@ class FakePopup:
         on_destroy: Any,
         on_position_saved: Any,
     ) -> None:
-        del root, config_getter, on_destroy, on_position_saved
+        del root, on_destroy, on_position_saved
         type(self).instances += 1
+        type(self).initial_configs.append(dict(config_getter()))
         self.request_id = str(event["request_id"])
         self.resets = [self.request_id]
         self.content: list[str] = []
@@ -46,6 +55,7 @@ class FakePopup:
         self.completed = 0
         self.failed = 0
         self.finished = False
+        self.positioning_modes: list[bool] = []
 
     def reset(self, event: dict[str, Any]) -> None:
         self.request_id = str(event["request_id"])
@@ -71,12 +81,16 @@ class FakePopup:
     def reschedule_if_finished(self) -> None:
         pass
 
+    def set_positioning_mode(self, enabled: bool) -> None:
+        self.positioning_modes.append(bool(enabled))
+
     def destroy(self, manual: bool = False) -> None:
         del manual
 
 
 def test_popup_agent_reuses_one_window_and_ignores_superseded_stream(monkeypatch) -> None:
     FakePopup.instances = 0
+    FakePopup.initial_configs = []
     monkeypatch.setattr(popup_window.tk, "Tk", FakeRoot)
     monkeypatch.setattr(popup_window, "SubtitleOverlay", FakePopup)
 
@@ -105,6 +119,7 @@ def test_popup_agent_reuses_one_window_and_ignores_superseded_stream(monkeypatch
 
 def test_latest_pending_request_wins_before_window_is_created(monkeypatch) -> None:
     FakePopup.instances = 0
+    FakePopup.initial_configs = []
     monkeypatch.setattr(popup_window.tk, "Tk", FakeRoot)
     monkeypatch.setattr(popup_window, "SubtitleOverlay", FakePopup)
 
@@ -118,6 +133,46 @@ def test_latest_pending_request_wins_before_window_is_created(monkeypatch) -> No
     assert agent.popup is not None
     assert agent.active_request_id == "r2"
     assert agent.popup.content == ["latest"]
+
+
+
+def test_positioning_mode_temporarily_overrides_click_through(monkeypatch) -> None:
+    FakePopup.instances = 0
+    FakePopup.initial_configs = []
+    monkeypatch.setattr(popup_window.tk, "Tk", FakeRoot)
+    monkeypatch.setattr(popup_window, "SubtitleOverlay", FakePopup)
+
+    agent = popup_window.PopupAgent(queue.Queue())
+    agent._handle({"type": "popup_interaction_mode", "mode": "positioning", "timeout_seconds": 60})
+    agent._handle({"type": "request_start", "request_id": "preview", "model": "preview"})
+    agent._handle({"type": "content_delta", "request_id": "preview", "text": "drag"})
+
+    assert agent.positioning_mode is True
+    assert agent.popup is not None
+    assert FakePopup.initial_configs[-1]["click_through"] is False
+    assert agent.popup.positioning_modes[-1] is True
+
+    agent._save_position(222, 333)
+    assert agent.positioning_mode is False
+    assert agent.popup.positioning_modes[-1] is False
+    assert agent.config["position"] == "custom"
+    assert agent.config["custom_x"] == 222
+    assert agent.config["custom_y"] == 333
+
+def test_reasoning_delta_opens_subtitle_before_final_content(monkeypatch) -> None:
+    FakePopup.instances = 0
+    FakePopup.initial_configs = []
+    monkeypatch.setattr(popup_window.tk, "Tk", FakeRoot)
+    monkeypatch.setattr(popup_window, "SubtitleOverlay", FakePopup)
+
+    agent = popup_window.PopupAgent(queue.Queue())
+    agent._handle({"type": "request_start", "request_id": "r1", "model": "m1"})
+    agent._handle({"type": "reasoning_delta", "request_id": "r1", "text": "thinking"})
+
+    assert agent.popup is not None
+    assert agent.active_request_id == "r1"
+    assert agent.popup.reasoning == ["thinking"]
+
 
 def make_settings(tmp_path: Path) -> Settings:
     project_root = Path(__file__).resolve().parents[1]
@@ -144,3 +199,17 @@ def test_dragged_position_callback_is_persisted(tmp_path: Path) -> None:
     assert config["native_popup_custom_y"] == 145
     assert config["native_popup_offset_x"] == 0
     assert config["native_popup_offset_y"] == 0
+
+
+def test_runtime_migrates_420_click_through_to_safe_default(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    settings.config_path.write_text(
+        '{"default_model":"m","upstream_base_url":"http://127.0.0.1:1/v1",'
+        '"native_popup_click_through":true}',
+        encoding="utf-8",
+    )
+    runtime = Runtime.create(settings)
+    config = runtime.config_store.read()
+    assert config["config_schema_version"] == 2
+    assert config["native_popup_click_through"] is False

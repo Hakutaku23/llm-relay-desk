@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LLM Relay Desk</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=4.1.0">
+  <link rel="stylesheet" href="/ui/styles.css?v=4.2.1">
 </head>
 <body>
   <div class="shell">
@@ -163,7 +163,8 @@
             </div>
             <div class="actions">
               <button class="secondary" id="reloadSubtitleBtn" type="button">读取已保存位置</button>
-              <button class="secondary" id="previewPopupBtn" type="button">预览并拖动</button>
+              <button class="secondary" id="previewPopupBtn" type="button">进入定位模式</button>
+              <button class="secondary" id="finishPositioningBtn" type="button">结束定位</button>
               <button class="primary" id="saveSubtitleBtn" type="button">保存字幕设置</button>
             </div>
           </div>
@@ -182,6 +183,14 @@
               <input id="nativePopupCloseSeconds" type="number" min="1" max="3600" value="30">
               <small>新请求在窗口关闭前到来时，会清空并复用同一个字幕框。</small>
             </div>
+            <div class="field switch-field">
+              <label>鼠标穿透模式</label>
+              <label class="switch">
+                <input id="nativePopupClickThrough" type="checkbox">
+                <span class="slider"></span>
+              </label>
+              <small>Windows 下启用后，点击、滚轮和拖动会穿透字幕，直接作用于下方程序。</small>
+            </div>
 
             <div class="field">
               <label for="nativePopupPosition">初始位置</label>
@@ -197,7 +206,7 @@
                 <option value="bottom_right">右下</option>
                 <option value="custom">自定义（拖动后自动保存）</option>
               </select>
-              <small>点击“预览并拖动”，拖到目标位置后松开鼠标，坐标会自动写入配置。</small>
+              <small>点击“进入定位模式”会临时关闭穿透；拖动后松开鼠标，坐标自动保存并恢复穿透。</small>
             </div>
             <div class="field">
               <label>已保存的绝对坐标</label>
@@ -276,7 +285,7 @@
             <strong>这是一段字幕颜色预览文本。</strong>
           </div>
           <div class="notice">
-            屏幕上始终只有一个字幕框。新请求会获得显示权，旧请求尚未结束的后续分片不会再写入字幕，避免并发响应互相覆盖。
+            屏幕上始终只有一个字幕框。新请求会获得显示权，旧请求尚未结束的后续分片不会再写入字幕。穿透模式下字幕不会响应鼠标；定位模式最多持续 60 秒，拖动保存后会立即恢复配置状态。
           </div>
           <pre class="result compact" id="subtitleResult">尚未保存。</pre>
         </div>
@@ -371,6 +380,6 @@
     </main>
   </div>
 
-  <script src="/ui/app.js?v=4.1.0"></script>
+  <script src="/ui/app.js?v=4.2.1"></script>
 </body>
 </html>

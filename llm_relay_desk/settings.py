@@ -10,11 +10,14 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-APP_VERSION = "4.1.0"
+APP_VERSION = "4.2.1"
 APP_TITLE = "LLM Relay Desk"
 APP_DESCRIPTION = "本地 LLM API 转发、提示词管理、Web 监视器与原生字幕浮层"
 
+CONFIG_SCHEMA_VERSION = 2
+
 DEFAULT_CONFIG: dict[str, Any] = {
+    "config_schema_version": CONFIG_SCHEMA_VERSION,
     "upstream_base_url": "http://127.0.0.1:11435/v1",
     "upstream_api_key": "ollama",
     "local_api_key": "sk-local-ollama-change-me",
@@ -34,6 +37,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "native_popup_font_size": 24,
     "native_popup_opacity": 0.88,
     "native_popup_show_reasoning": False,
+    "native_popup_click_through": False,
     "native_popup_background_color": "#101318",
     "native_popup_text_color": "#f7f8fa",
     "native_popup_muted_color": "#aeb6c2",

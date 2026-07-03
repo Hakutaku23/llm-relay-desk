@@ -52,6 +52,7 @@ class NativePopupController:
             "font_size": int(config.get("native_popup_font_size", 24)),
             "opacity": float(config.get("native_popup_opacity", 0.88)),
             "show_reasoning": bool(config.get("native_popup_show_reasoning", False)),
+            "click_through": bool(config.get("native_popup_click_through", False)),
             "background_color": str(
                 config.get("native_popup_background_color", "#101318")
             ),
@@ -77,6 +78,28 @@ class NativePopupController:
             self._ensure_process_locked()
             if self.event_queue is not None:
                 self._put_locked(dict(event))
+
+    def set_positioning_mode(
+        self,
+        enabled: bool,
+        *,
+        timeout_seconds: int = 60,
+    ) -> None:
+        """Temporarily disable click-through so the subtitle can be dragged."""
+
+        if not self.enabled:
+            return
+        timeout_seconds = max(5, min(300, int(timeout_seconds)))
+        with self.lock:
+            self._ensure_process_locked()
+            if self.event_queue is not None:
+                self._put_locked(
+                    {
+                        "type": "popup_interaction_mode",
+                        "mode": "positioning" if enabled else "configured",
+                        "timeout_seconds": timeout_seconds,
+                    }
+                )
 
     def is_alive(self) -> bool:
         with self.lock:

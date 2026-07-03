@@ -73,7 +73,8 @@ async function loadHealth() {
       $("nativePopupDetail").textContent = "可在字幕设置中开启";
     } else if (health.native_popup_worker_alive) {
       $("nativePopupStatus").textContent = "字幕浮层运行中";
-      $("nativePopupDetail").textContent = `${health.native_popup_position || "bottom_center"} · 完成后 ${health.native_popup_close_seconds} 秒关闭`;
+      const interaction = health.native_popup_click_through ? "鼠标穿透" : "可交互";
+      $("nativePopupDetail").textContent = `${interaction} · ${health.native_popup_position || "bottom_center"} · 完成后 ${health.native_popup_close_seconds} 秒关闭`;
     } else {
       $("nativePopupStatus").textContent = "桌面窗口不可用";
       $("nativePopupDetail").textContent = "请检查 tkinter 或桌面会话";
@@ -155,6 +156,7 @@ async function loadSubtitleConfig() {
   $("nativePopupFontSize").value = config.native_popup_font_size || 24;
   $("nativePopupOpacity").value = config.native_popup_opacity ?? 0.88;
   $("nativePopupShowReasoning").checked = Boolean(config.native_popup_show_reasoning);
+  $("nativePopupClickThrough").checked = config.native_popup_click_through === true;
   $("nativePopupBackgroundColor").value = config.native_popup_background_color || "#101318";
   $("nativePopupTextColor").value = config.native_popup_text_color || "#f7f8fa";
   $("nativePopupMutedColor").value = config.native_popup_muted_color || "#aeb6c2";
@@ -177,6 +179,7 @@ function subtitlePayload() {
     native_popup_font_size: Number($("nativePopupFontSize").value),
     native_popup_opacity: Number($("nativePopupOpacity").value),
     native_popup_show_reasoning: $("nativePopupShowReasoning").checked,
+    native_popup_click_through: $("nativePopupClickThrough").checked,
     native_popup_background_color: $("nativePopupBackgroundColor").value,
     native_popup_text_color: $("nativePopupTextColor").value,
     native_popup_muted_color: $("nativePopupMutedColor").value,
@@ -568,12 +571,24 @@ async function sendTest() {
   }
 }
 
+async function finishSubtitlePositioning({ silent = false } = {}) {
+  clearInterval(window.__subtitlePositionWatch);
+  try {
+    await request("/admin/subtitle-positioning/finish", { method: "POST" });
+    if (!silent) toast("已结束定位模式，字幕恢复当前穿透设置");
+  } catch (error) {
+    if (!silent) toast(error.message, true);
+  }
+}
+
 function startSubtitlePositionWatch(previous) {
   clearInterval(window.__subtitlePositionWatch);
-  const deadline = Date.now() + 90_000;
+  const deadline = Date.now() + 65_000;
   window.__subtitlePositionWatch = setInterval(async () => {
     if (Date.now() > deadline) {
       clearInterval(window.__subtitlePositionWatch);
+      await finishSubtitlePositioning({ silent: true });
+      toast("定位模式已超时，字幕已恢复当前穿透设置");
       return;
     }
     try {
@@ -591,7 +606,8 @@ function startSubtitlePositionWatch(previous) {
       $("nativePopupOffsetY").value = latest.native_popup_offset_y ?? 0;
       state.subtitle = { ...(state.subtitle || {}), ...latest };
       clearInterval(window.__subtitlePositionWatch);
-      toast(`字幕位置已保存：${latest.native_popup_custom_x}, ${latest.native_popup_custom_y}`);
+      await finishSubtitlePositioning({ silent: true });
+      toast(`字幕位置已保存：${latest.native_popup_custom_x}, ${latest.native_popup_custom_y}；已恢复穿透设置`);
     } catch {
       // The manual reload button remains available if polling is interrupted.
     }
@@ -607,9 +623,9 @@ async function previewPopup() {
       x: Number($("nativePopupCustomX").value),
       y: Number($("nativePopupCustomY").value),
     };
-    await request("/admin/native-popup/preview", { method: "POST" });
+    await request("/admin/subtitle-positioning/start", { method: "POST" });
     startSubtitlePositionWatch(previous);
-    toast("预览已打开；拖动字幕并松开鼠标即可自动保存位置");
+    toast("定位模式已开启；拖动字幕并松开鼠标即可自动保存位置");
   } catch (error) {
     if (!error?.message) toast("无法打开字幕预览", true);
   } finally {
@@ -647,6 +663,9 @@ $("reloadSubtitleBtn").addEventListener("click", async () => {
   }
 });
 $("previewPopupBtn").addEventListener("click", previewPopup);
+$("finishPositioningBtn").addEventListener("click", () => {
+  finishSubtitlePositioning().catch(() => {});
+});
 $("promptSelect").addEventListener("change", loadSelectedPrompt);
 $("promptContent").addEventListener("input", updatePromptStats);
 $("savePromptBtn").addEventListener("click", savePrompt);

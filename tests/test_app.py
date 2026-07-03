@@ -29,11 +29,12 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
     with TestClient(app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "4.1.0"
+        assert health.json()["version"] == "4.2.1"
         ui = client.get("/ui/")
         assert ui.status_code == 200
         assert "data-tab=\"subtitle\"" in ui.text
         assert "nativePopupBackgroundColor" in ui.text
+        assert "nativePopupClickThrough" in ui.text
         config_section = ui.text.split('id="tab-config"', 1)[1].split('id="tab-subtitle"', 1)[0]
         assert "nativePopupEnabled" not in config_section
         assert client.get("/monitor/").status_code == 200
@@ -53,6 +54,8 @@ def test_route_contract_is_preserved(tmp_path: Path) -> None:
         ("/admin/config", "PUT"),
         ("/admin/subtitle-config", "GET"),
         ("/admin/subtitle-config", "PUT"),
+        ("/admin/subtitle-positioning/start", "POST"),
+        ("/admin/subtitle-positioning/finish", "POST"),
         ("/admin/prompts", "GET"),
         ("/api/chat", "POST"),
         ("/api/generate", "POST"),
@@ -78,6 +81,7 @@ def test_subtitle_config_endpoint(tmp_path: Path) -> None:
                 "native_popup_custom_y": -45,
                 "native_popup_background_color": "#112233",
                 "native_popup_text_color": "#abcdef",
+                "native_popup_click_through": True,
             },
         )
         assert response.status_code == 200
@@ -87,4 +91,5 @@ def test_subtitle_config_endpoint(tmp_path: Path) -> None:
         assert subtitle["native_popup_custom_y"] == -45
         assert subtitle["native_popup_background_color"] == "#112233"
         assert subtitle["native_popup_text_color"] == "#abcdef"
+        assert subtitle["native_popup_click_through"] is True
         assert "upstream_api_key" not in subtitle

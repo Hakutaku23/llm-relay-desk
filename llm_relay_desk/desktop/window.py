@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+from ctypes import wintypes
 import queue
 import re
 import sys
@@ -22,6 +23,7 @@ DEFAULT_POPUP_CONFIG: dict[str, Any] = {
     "font_size": 24,
     "opacity": 0.88,
     "show_reasoning": False,
+    "click_through": False,
     "background_color": "#101318",
     "text_color": "#f7f8fa",
     "muted_color": "#aeb6c2",
@@ -86,6 +88,7 @@ def normalize_popup_config(value: dict[str, Any] | None) -> dict[str, Any]:
         "font_size": _int_value(source.get("font_size"), 24, 12, 72),
         "opacity": _float_value(source.get("opacity"), 0.88, 0.30, 1.0),
         "show_reasoning": bool(source.get("show_reasoning", False)),
+        "click_through": bool(source.get("click_through", False)),
         "background_color": _color_value(source.get("background_color"), "#101318"),
         "text_color": _color_value(source.get("text_color"), "#f7f8fa"),
         "muted_color": _color_value(source.get("muted_color"), "#aeb6c2"),
@@ -136,6 +139,10 @@ class SubtitleOverlay:
         self.drag_offset_x = 0
         self.drag_offset_y = 0
         self.dragging = False
+        self.positioning_mode = False
+        self.click_through_applied = False
+        self.interaction_after_id: str | None = None
+        self.window_visible = False
 
         self.window = tk.Toplevel(root)
         self.window.withdraw()
@@ -144,7 +151,6 @@ class SubtitleOverlay:
 
         self._build()
         self.reset(event)
-        self._show_without_stealing_focus()
 
     def _build(self) -> None:
         self.shell = tk.Frame(self.window, padx=18, pady=12)
@@ -161,6 +167,14 @@ class SubtitleOverlay:
             cursor="fleur",
         )
         self.status_label.pack(side="left", fill="x", expand=True)
+
+        self.interaction_label = tk.Label(
+            self.header,
+            text="定位模式",
+            font=(FONT_FAMILY, 9, "bold"),
+            padx=8,
+            pady=2,
+        )
 
         self.close_button = tk.Button(
             self.header,
@@ -201,6 +215,11 @@ class SubtitleOverlay:
 
     def reset(self, event: dict[str, Any]) -> None:
         self._cancel_auto_close()
+        self._cancel_interaction_apply()
+        # Remove the pass-through style before repainting. Applying
+        # WS_EX_TRANSPARENT while Tk is still creating or updating its child
+        # controls can leave the layered window unpainted on some Windows builds.
+        self._set_click_through(False)
         self.request_id = str(event.get("request_id") or "unknown")
         self.model = str(event.get("model") or "模型响应")
         self.content_length = 0
@@ -209,10 +228,13 @@ class SubtitleOverlay:
         self.finished = False
         self.status_label.configure(text=f"{self.model} · 正在生成")
         self._replace_text("正在等待模型输出……", tag="reasoning")
-        self.apply_config()
+        self.apply_config(apply_interaction=False)
         self._show_without_stealing_focus()
+        self.window_visible = True
+        self._force_redraw()
+        self._schedule_interaction_state()
 
-    def apply_config(self) -> None:
+    def apply_config(self, *, apply_interaction: bool = True) -> None:
         config = self._popup_config()
         bg = config["background_color"]
         text_color = config["text_color"]
@@ -243,18 +265,21 @@ class SubtitleOverlay:
         )
         self.text.tag_configure("reasoning", foreground=muted)
         self.text.tag_configure("error", foreground=error)
+        self.interaction_label.configure(bg=bg, fg=text_color)
         self._position_window(config)
+        if apply_interaction:
+            self._schedule_interaction_state()
 
     def _position_window(self, config: dict[str, Any]) -> None:
         width = int(config["width"])
         height = int(config["height"])
         position = str(config["position"])
+        left, top, screen_width, screen_height = _virtual_screen(self.window)
 
         if position == "custom":
             x = int(config["custom_x"])
             y = int(config["custom_y"])
         else:
-            left, top, screen_width, screen_height = _virtual_screen(self.window)
             margin = 36
             if position.endswith("_left"):
                 x = left + margin
@@ -273,9 +298,19 @@ class SubtitleOverlay:
             x += int(config["offset_x"])
             y += int(config["offset_y"])
 
+        # Monitor layouts can change after a position was saved. Keep the whole
+        # subtitle inside the current virtual desktop so the positioning preview
+        # can always be found and dragged back into place.
+        max_x = left + max(0, screen_width - width)
+        max_y = top + max(0, screen_height - height)
+        x = max(left, min(x, max_x))
+        y = max(top, min(y, max_y))
         self.window.geometry(f"{width}x{height}{x:+d}{y:+d}")
 
     def _start_drag(self, event: tk.Event) -> str:
+        config = self._popup_config()
+        if config["click_through"] and not self.positioning_mode:
+            return "break"
         self.dragging = True
         self.drag_offset_x = int(event.x_root) - int(self.window.winfo_x())
         self.drag_offset_y = int(event.y_root) - int(self.window.winfo_y())
@@ -295,6 +330,198 @@ class SubtitleOverlay:
         self.dragging = False
         self.on_position_saved(int(self.window.winfo_x()), int(self.window.winfo_y()))
         return "break"
+
+    def set_positioning_mode(self, enabled: bool) -> None:
+        self.positioning_mode = bool(enabled)
+        self.dragging = False
+        self._cancel_interaction_apply()
+        if self.positioning_mode:
+            # Positioning must be interactive before the preview is painted.
+            self._set_click_through(False)
+            self._apply_interaction_state(self._popup_config())
+            self._show_without_stealing_focus()
+            self._force_redraw()
+        else:
+            self._schedule_interaction_state()
+
+    def _cancel_interaction_apply(self) -> None:
+        if self.interaction_after_id is None:
+            return
+        try:
+            self.window.after_cancel(self.interaction_after_id)
+        except tk.TclError:
+            pass
+        self.interaction_after_id = None
+
+    def _schedule_interaction_state(self, delay_ms: int = 60) -> None:
+        self._cancel_interaction_apply()
+        try:
+            self.interaction_after_id = self.window.after(
+                max(0, int(delay_ms)),
+                self._apply_scheduled_interaction_state,
+            )
+        except tk.TclError:
+            self.interaction_after_id = None
+
+    def _apply_scheduled_interaction_state(self) -> None:
+        self.interaction_after_id = None
+        self._apply_interaction_state(self._popup_config())
+        self._force_redraw()
+
+    def _native_hwnd(self) -> int | None:
+        if sys.platform != "win32":
+            return None
+        try:
+            user32 = ctypes.windll.user32
+            get_parent = user32.GetParent
+            get_parent.argtypes = [wintypes.HWND]
+            get_parent.restype = wintypes.HWND
+            hwnd = int(self.window.winfo_id())
+            parent = int(get_parent(hwnd) or 0)
+            return parent or hwnd
+        except Exception:
+            return None
+
+    def _set_click_through(self, enabled: bool) -> None:
+        """Toggle mouse pass-through without changing Tk's paint model.
+
+        Only WS_EX_TRANSPARENT is changed here. Tool-window, layered and
+        no-activate styles are owned by _show_without_stealing_focus(). Keeping
+        those responsibilities separate avoids blank layered windows on Windows.
+        """
+
+        requested = bool(enabled)
+        hwnd = self._native_hwnd()
+        if hwnd is None:
+            self.click_through_applied = False
+            return
+        try:
+            user32 = ctypes.windll.user32
+            GWL_EXSTYLE = -20
+            WS_EX_TRANSPARENT = 0x00000020
+            SW_SHOWNOACTIVATE = 4
+            SWP_NOSIZE = 0x0001
+            SWP_NOMOVE = 0x0002
+            SWP_NOZORDER = 0x0004
+            SWP_NOACTIVATE = 0x0010
+            SWP_SHOWWINDOW = 0x0040
+            SWP_FRAMECHANGED = 0x0020
+
+            if hasattr(user32, "GetWindowLongPtrW"):
+                get_style = user32.GetWindowLongPtrW
+                set_style = user32.SetWindowLongPtrW
+                get_style.restype = ctypes.c_ssize_t
+                set_style.restype = ctypes.c_ssize_t
+                set_value_type = ctypes.c_ssize_t
+            else:
+                get_style = user32.GetWindowLongW
+                set_style = user32.SetWindowLongW
+                get_style.restype = ctypes.c_long
+                set_style.restype = ctypes.c_long
+                set_value_type = ctypes.c_long
+            get_style.argtypes = [wintypes.HWND, ctypes.c_int]
+            set_style.argtypes = [wintypes.HWND, ctypes.c_int, set_value_type]
+            user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+            user32.ShowWindow.restype = wintypes.BOOL
+            user32.SetWindowPos.argtypes = [
+                wintypes.HWND,
+                wintypes.HWND,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                wintypes.UINT,
+            ]
+            user32.SetWindowPos.restype = wintypes.BOOL
+            style = int(get_style(hwnd, GWL_EXSTYLE))
+            new_style = (
+                style | WS_EX_TRANSPARENT
+                if requested
+                else style & ~WS_EX_TRANSPARENT
+            )
+            if new_style != style:
+                set_style(hwnd, GWL_EXSTYLE, new_style)
+            if self.window_visible:
+                user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
+                user32.SetWindowPos(
+                    hwnd,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOSIZE
+                    | SWP_NOMOVE
+                    | SWP_NOZORDER
+                    | SWP_NOACTIVATE
+                    | SWP_SHOWWINDOW
+                    | SWP_FRAMECHANGED,
+                )
+            self.click_through_applied = requested
+        except Exception:
+            # Fail open: a visible interactive subtitle is preferable to a
+            # pass-through subtitle that cannot be seen or repositioned.
+            self.click_through_applied = False
+
+    def _force_redraw(self) -> None:
+        if not self.window_visible:
+            return
+        try:
+            self.window.update_idletasks()
+        except tk.TclError:
+            return
+        hwnd = self._native_hwnd()
+        if hwnd is None:
+            return
+        try:
+            user32 = ctypes.windll.user32
+            user32.RedrawWindow.argtypes = [
+                wintypes.HWND,
+                ctypes.c_void_p,
+                wintypes.HRGN,
+                wintypes.UINT,
+            ]
+            user32.RedrawWindow.restype = wintypes.BOOL
+            RDW_INVALIDATE = 0x0001
+            RDW_UPDATENOW = 0x0100
+            RDW_ALLCHILDREN = 0x0080
+            RDW_FRAME = 0x0400
+            user32.RedrawWindow(
+                hwnd,
+                None,
+                None,
+                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_FRAME,
+            )
+        except Exception:
+            pass
+
+    def _apply_interaction_state(self, config: dict[str, Any]) -> None:
+        requested_click_through = (
+            bool(config["click_through"])
+            and not self.positioning_mode
+            and self.window_visible
+        )
+        self._set_click_through(requested_click_through)
+        click_through = self.click_through_applied
+
+        cursor = "fleur" if not click_through else "arrow"
+        for widget in (self.shell, self.header, self.status_label, self.text):
+            try:
+                widget.configure(cursor=cursor)
+            except tk.TclError:
+                pass
+
+        if self.positioning_mode:
+            if not self.close_button.winfo_manager():
+                self.close_button.pack(side="right")
+            if not self.interaction_label.winfo_manager():
+                self.interaction_label.pack(side="right", before=self.close_button)
+        else:
+            self.interaction_label.pack_forget()
+            if click_through:
+                self.close_button.pack_forget()
+            elif not self.close_button.winfo_manager():
+                self.close_button.pack(side="right")
 
     def _show_without_stealing_focus(self) -> None:
         self.window.update_idletasks()
@@ -335,10 +562,12 @@ class SubtitleOverlay:
                     0,
                     SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
                 )
+                self.window_visible = True
                 return
             except Exception:
                 pass
         self.window.deiconify()
+        self.window_visible = True
 
     def _replace_text(self, text: str, tag: str | None = None) -> None:
         self.text.configure(state="normal")
@@ -349,6 +578,7 @@ class SubtitleOverlay:
             self.text.insert("end", text)
         self.text.see("end")
         self.text.configure(state="disabled")
+        self._force_redraw()
 
     def _append_text(self, text: str, tag: str | None = None) -> None:
         if not text:
@@ -364,6 +594,7 @@ class SubtitleOverlay:
             self.text.delete("1.0", f"1.0+{remove_chars}c")
         self.text.see("end")
         self.text.configure(state="disabled")
+        self._force_redraw()
 
     def append_content(self, text: str) -> None:
         if not text:
@@ -456,6 +687,8 @@ class SubtitleOverlay:
     def destroy(self, manual: bool = False) -> None:
         request_id = self.request_id
         self._cancel_auto_close()
+        self._cancel_interaction_apply()
+        self.window_visible = False
         try:
             self.window.destroy()
         except tk.TclError:
@@ -473,6 +706,8 @@ class PopupAgent:
         self.pending_starts: dict[str, dict[str, Any]] = {}
         self.suppressed_requests: set[str] = set()
         self.superseded_requests: set[str] = set()
+        self.positioning_mode = False
+        self.positioning_timeout_after_id: str | None = None
 
         self.root = tk.Tk()
         self.root.withdraw()
@@ -508,14 +743,24 @@ class PopupAgent:
             self._shutdown()
             return
 
+        if event_type == "popup_interaction_mode":
+            self._set_positioning_mode(
+                event.get("mode") == "positioning",
+                timeout_seconds=int(event.get("timeout_seconds", 60)),
+            )
+            return
+
         if event_type == "popup_config":
             self.config = normalize_popup_config(event)
             if not self.config["enabled"]:
+                self._set_positioning_mode(False)
                 self._close_popup()
                 self.pending_starts.clear()
                 self.suppressed_requests.clear()
                 self.superseded_requests.clear()
             elif self.popup is not None:
+                self.popup.apply_config(apply_interaction=False)
+                self.popup.set_positioning_mode(self.positioning_mode)
                 self.popup.reschedule_if_finished()
             return
 
@@ -597,14 +842,47 @@ class PopupAgent:
             self.popup = SubtitleOverlay(
                 self.root,
                 start_event,
-                config_getter=lambda: self.config,
+                config_getter=lambda: {
+                    **self.config,
+                    "click_through": False,
+                }
+                if self.positioning_mode
+                else self.config,
                 on_destroy=self._remove_popup,
                 on_position_saved=self._save_position,
             )
         else:
             self.popup.reset(start_event)
+        self.popup.set_positioning_mode(self.positioning_mode)
         self.active_request_id = request_id
         self.pending_starts.pop(request_id, None)
+
+    def _set_positioning_mode(
+        self,
+        enabled: bool,
+        *,
+        timeout_seconds: int = 60,
+    ) -> None:
+        if self.positioning_timeout_after_id is not None:
+            try:
+                self.root.after_cancel(self.positioning_timeout_after_id)
+            except (AttributeError, tk.TclError):
+                pass
+            self.positioning_timeout_after_id = None
+
+        self.positioning_mode = bool(enabled)
+        if self.popup is not None:
+            self.popup.set_positioning_mode(self.positioning_mode)
+
+        if self.positioning_mode:
+            timeout_ms = max(5, min(300, int(timeout_seconds))) * 1000
+            try:
+                self.positioning_timeout_after_id = self.root.after(
+                    timeout_ms,
+                    lambda: self._set_positioning_mode(False),
+                )
+            except tk.TclError:
+                self.positioning_timeout_after_id = None
 
     def _save_position(self, x: int, y: int) -> None:
         self.config = {
@@ -615,18 +893,18 @@ class PopupAgent:
             "offset_x": 0,
             "offset_y": 0,
         }
-        if self.control_queue is None:
-            return
-        try:
-            self.control_queue.put_nowait(
-                {
-                    "type": "popup_position_saved",
-                    "x": int(x),
-                    "y": int(y),
-                }
-            )
-        except (queue.Full, BrokenPipeError, EOFError, OSError):
-            pass
+        if self.control_queue is not None:
+            try:
+                self.control_queue.put_nowait(
+                    {
+                        "type": "popup_position_saved",
+                        "x": int(x),
+                        "y": int(y),
+                    }
+                )
+            except (queue.Full, BrokenPipeError, EOFError, OSError):
+                pass
+        self._set_positioning_mode(False)
 
     def _remove_popup(self, request_id: str, manual: bool) -> None:
         self.popup = None
@@ -644,6 +922,7 @@ class PopupAgent:
             popup.destroy(manual=False)
 
     def _shutdown(self) -> None:
+        self._set_positioning_mode(False)
         self._close_popup()
         try:
             self.root.destroy()

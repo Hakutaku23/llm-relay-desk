@@ -45,3 +45,13 @@ API 主进程  ◀─ saved position  ───  字幕进程
 ```
 
 鼠标释放后，字幕进程发送绝对 X/Y 坐标；`NativePopupController` 的控制线程调用运行期回调，将 `native_popup_position=custom` 与坐标原子写入 `data/config.json`。位置回写失败不会阻塞 API 转发。
+
+
+## 字幕交互模式
+
+桌面字幕进程接收 `popup_interaction_mode` 控制事件。常态按配置应用鼠标穿透；定位模式临时关闭穿透，允许拖动并通过控制队列回写坐标。定位模式有超时保护，且不参与 API 响应链路。
+
+
+## 穿透安全策略
+
+字幕窗口先完成 Tk 首帧显示和子控件绘制，再延迟写入 `WS_EX_TRANSPARENT`。穿透切换不修改 layered/no-activate/tool-window 等基础样式；流式文本更新后主动请求 Win32 重绘。定位模式通过事件队列提前覆盖穿透配置，确保预览窗口从创建开始即可交互。

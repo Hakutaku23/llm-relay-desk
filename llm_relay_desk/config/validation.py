@@ -142,6 +142,9 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
     updated["native_popup_show_reasoning"] = bool(
         updated.get("native_popup_show_reasoning", False)
     )
+    updated["native_popup_click_through"] = bool(
+        updated.get("native_popup_click_through", False)
+    )
     updated["native_popup_background_color"] = _hex_color(
         updated, "native_popup_background_color", "#101318", "字幕背景颜色"
     )

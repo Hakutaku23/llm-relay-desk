@@ -29,6 +29,7 @@ SUBTITLE_CONFIG_KEYS = {
     "native_popup_font_size",
     "native_popup_opacity",
     "native_popup_show_reasoning",
+    "native_popup_click_through",
     "native_popup_background_color",
     "native_popup_text_color",
     "native_popup_muted_color",
@@ -87,9 +88,7 @@ async def put_subtitle_config(
     return {"ok": True, "config": _subtitle_config(updated)}
 
 
-@router.post("/native-popup/preview")
-async def preview_native_popup(request: Request) -> dict[str, Any]:
-    runtime = runtime_from_request(request)
+def _start_native_popup_preview(runtime: Any) -> str:
     config = runtime.config_store.read()
     runtime.popup.configure(config)
     if not config.get("native_popup_enabled", True):
@@ -98,6 +97,7 @@ async def preview_native_popup(request: Request) -> dict[str, Any]:
             detail="请先开启原生字幕浮层并保存配置",
         )
 
+    runtime.popup.set_positioning_mode(True, timeout_seconds=60)
     request_id = f"preview_{uuid.uuid4().hex[:12]}"
 
     async def emit_preview() -> None:
@@ -106,7 +106,7 @@ async def preview_native_popup(request: Request) -> dict[str, Any]:
                 "type": "request_start",
                 "request_id": request_id,
                 "api": "preview",
-                "route": "/admin/native-popup/preview",
+                "route": "/admin/subtitle-positioning/start",
                 "model": "字幕位置预览",
                 "source": "管理界面",
                 "user_agent": "LLM Relay Desk",
@@ -114,7 +114,7 @@ async def preview_native_popup(request: Request) -> dict[str, Any]:
                 "started_at": utc_now_iso(),
             }
         )
-        for text in ("这是一个", "固定位置的", "流式字幕预览。"):
+        for text in ("定位模式已开启。", "拖动字幕到目标位置，", "松开鼠标后自动保存并恢复穿透。"):
             await asyncio.sleep(0.18)
             runtime.popup.publish(
                 {
@@ -134,7 +134,28 @@ async def preview_native_popup(request: Request) -> dict[str, Any]:
         )
 
     asyncio.create_task(emit_preview())
-    return {"ok": True, "request_id": request_id}
+    return request_id
+
+
+@router.post("/native-popup/preview")
+async def preview_native_popup(request: Request) -> dict[str, Any]:
+    """Backward-compatible alias for the positioning preview."""
+
+    request_id = _start_native_popup_preview(runtime_from_request(request))
+    return {"ok": True, "request_id": request_id, "positioning": True}
+
+
+@router.post("/subtitle-positioning/start")
+async def start_subtitle_positioning(request: Request) -> dict[str, Any]:
+    request_id = _start_native_popup_preview(runtime_from_request(request))
+    return {"ok": True, "request_id": request_id, "positioning": True}
+
+
+@router.post("/subtitle-positioning/finish")
+async def finish_subtitle_positioning(request: Request) -> dict[str, Any]:
+    runtime = runtime_from_request(request)
+    runtime.popup.set_positioning_mode(False)
+    return {"ok": True, "positioning": False}
 
 
 @router.get("/prompts")

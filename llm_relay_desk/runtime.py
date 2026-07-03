@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from llm_relay_desk.desktop import NativePopupController
 from llm_relay_desk.monitoring import MonitorHub
 from llm_relay_desk.prompts import PromptService
-from llm_relay_desk.settings import DEFAULT_CONFIG, DEFAULT_PROMPTS, Settings
+from llm_relay_desk.settings import (
+    CONFIG_SCHEMA_VERSION,
+    DEFAULT_CONFIG,
+    DEFAULT_PROMPTS,
+    Settings,
+)
 from llm_relay_desk.storage import JsonStore
 
 
@@ -25,8 +30,20 @@ class Runtime:
         prompt_store = JsonStore(settings.prompts_path, DEFAULT_PROMPTS)
 
         existing_config = config_store.read()
-        if any(key not in existing_config for key in DEFAULT_CONFIG):
-            config_store.write({**DEFAULT_CONFIG, **existing_config})
+        try:
+            schema_version = int(existing_config.get("config_schema_version", 1))
+        except (TypeError, ValueError):
+            schema_version = 1
+
+        merged_config = {**DEFAULT_CONFIG, **existing_config}
+        if schema_version < 2:
+            # 4.2.0 enabled pass-through by default and applied the native style
+            # before the Tk window completed its first paint. Reset it once so
+            # upgrades always recover a visible, interactive subtitle surface.
+            merged_config["native_popup_click_through"] = False
+        merged_config["config_schema_version"] = CONFIG_SCHEMA_VERSION
+        if merged_config != existing_config:
+            config_store.write(merged_config)
 
         def save_popup_position(x: int, y: int) -> None:
             config_store.update(
