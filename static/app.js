@@ -1,11 +1,13 @@
 const state = {
   config: null,
+  subtitle: null,
   prompts: null,
 };
 
 const tabMeta = {
   status: ["服务状态", "检查本地代理、上游服务和实时监视器。"],
   config: ["转发配置", "配置上游端口、模型、密钥和推理参数。"],
+  subtitle: ["字幕设置", "配置字幕外观、位置、拖动保存和单窗口行为。"],
   prompts: ["提示词管理", "保存、加载并随时切换系统提示词。"],
   test: ["API 测试", "直接验证 OpenAI 兼容接口和提示词效果。"],
 };
@@ -68,7 +70,7 @@ async function loadHealth() {
     $("promptLengthValue").textContent = `${health.active_prompt_length} 字符`;
     if (!health.native_popup_enabled) {
       $("nativePopupStatus").textContent = "已关闭";
-      $("nativePopupDetail").textContent = "可在转发配置中开启";
+      $("nativePopupDetail").textContent = "可在字幕设置中开启";
     } else if (health.native_popup_worker_alive) {
       $("nativePopupStatus").textContent = "字幕浮层运行中";
       $("nativePopupDetail").textContent = `${health.native_popup_position || "bottom_center"} · 完成后 ${health.native_popup_close_seconds} 秒关闭`;
@@ -96,16 +98,6 @@ async function loadConfig() {
   $("defaultModel").value = state.config.default_model || "";
   $("requestTimeout").value = state.config.request_timeout_seconds || 600;
   $("promptEnabled").checked = Boolean(state.config.prompt_enabled);
-  $("nativePopupEnabled").checked = state.config.native_popup_enabled !== false;
-  $("nativePopupCloseSeconds").value = state.config.native_popup_close_seconds || 30;
-  $("nativePopupPosition").value = state.config.native_popup_position || "bottom_center";
-  $("nativePopupOffsetX").value = state.config.native_popup_offset_x ?? 0;
-  $("nativePopupOffsetY").value = state.config.native_popup_offset_y ?? 0;
-  $("nativePopupWidth").value = state.config.native_popup_width || 960;
-  $("nativePopupHeight").value = state.config.native_popup_height || 220;
-  $("nativePopupFontSize").value = state.config.native_popup_font_size || 24;
-  $("nativePopupOpacity").value = state.config.native_popup_opacity ?? 0.88;
-  $("nativePopupShowReasoning").checked = Boolean(state.config.native_popup_show_reasoning);
   $("recommendedApiKey").textContent = state.config.local_api_key || "无需密钥";
   $("recommendedModel").textContent = state.config.default_model || "--";
   $("testModel").value = state.config.default_model || "";
@@ -119,16 +111,6 @@ async function saveConfig() {
     default_model: $("defaultModel").value.trim(),
     request_timeout_seconds: Number($("requestTimeout").value),
     prompt_enabled: $("promptEnabled").checked,
-    native_popup_enabled: $("nativePopupEnabled").checked,
-    native_popup_close_seconds: Number($("nativePopupCloseSeconds").value),
-    native_popup_position: $("nativePopupPosition").value,
-    native_popup_offset_x: Number($("nativePopupOffsetX").value),
-    native_popup_offset_y: Number($("nativePopupOffsetY").value),
-    native_popup_width: Number($("nativePopupWidth").value),
-    native_popup_height: Number($("nativePopupHeight").value),
-    native_popup_font_size: Number($("nativePopupFontSize").value),
-    native_popup_opacity: Number($("nativePopupOpacity").value),
-    native_popup_show_reasoning: $("nativePopupShowReasoning").checked,
   };
 
   $("saveConfigBtn").disabled = true;
@@ -146,6 +128,82 @@ async function saveConfig() {
     toast(error.message, true);
   } finally {
     $("saveConfigBtn").disabled = false;
+  }
+}
+
+function updateSubtitleColorPreview() {
+  const preview = $("subtitleColorPreview");
+  if (!preview) return;
+  preview.style.background = $("nativePopupBackgroundColor").value;
+  preview.style.color = $("nativePopupTextColor").value;
+  preview.style.borderColor = $("nativePopupBorderColor").value;
+  preview.querySelector("small").style.color = $("nativePopupMutedColor").value;
+}
+
+async function loadSubtitleConfig() {
+  state.subtitle = await request("/admin/subtitle-config");
+  const config = state.subtitle || {};
+  $("nativePopupEnabled").checked = config.native_popup_enabled !== false;
+  $("nativePopupCloseSeconds").value = config.native_popup_close_seconds || 30;
+  $("nativePopupPosition").value = config.native_popup_position || "bottom_center";
+  $("nativePopupOffsetX").value = config.native_popup_offset_x ?? 0;
+  $("nativePopupOffsetY").value = config.native_popup_offset_y ?? 0;
+  $("nativePopupCustomX").value = config.native_popup_custom_x ?? 120;
+  $("nativePopupCustomY").value = config.native_popup_custom_y ?? 120;
+  $("nativePopupWidth").value = config.native_popup_width || 960;
+  $("nativePopupHeight").value = config.native_popup_height || 220;
+  $("nativePopupFontSize").value = config.native_popup_font_size || 24;
+  $("nativePopupOpacity").value = config.native_popup_opacity ?? 0.88;
+  $("nativePopupShowReasoning").checked = Boolean(config.native_popup_show_reasoning);
+  $("nativePopupBackgroundColor").value = config.native_popup_background_color || "#101318";
+  $("nativePopupTextColor").value = config.native_popup_text_color || "#f7f8fa";
+  $("nativePopupMutedColor").value = config.native_popup_muted_color || "#aeb6c2";
+  $("nativePopupBorderColor").value = config.native_popup_border_color || "#343a46";
+  $("nativePopupErrorColor").value = config.native_popup_error_color || "#ff8f9b";
+  updateSubtitleColorPreview();
+}
+
+function subtitlePayload() {
+  return {
+    native_popup_enabled: $("nativePopupEnabled").checked,
+    native_popup_close_seconds: Number($("nativePopupCloseSeconds").value),
+    native_popup_position: $("nativePopupPosition").value,
+    native_popup_offset_x: Number($("nativePopupOffsetX").value),
+    native_popup_offset_y: Number($("nativePopupOffsetY").value),
+    native_popup_custom_x: Number($("nativePopupCustomX").value),
+    native_popup_custom_y: Number($("nativePopupCustomY").value),
+    native_popup_width: Number($("nativePopupWidth").value),
+    native_popup_height: Number($("nativePopupHeight").value),
+    native_popup_font_size: Number($("nativePopupFontSize").value),
+    native_popup_opacity: Number($("nativePopupOpacity").value),
+    native_popup_show_reasoning: $("nativePopupShowReasoning").checked,
+    native_popup_background_color: $("nativePopupBackgroundColor").value,
+    native_popup_text_color: $("nativePopupTextColor").value,
+    native_popup_muted_color: $("nativePopupMutedColor").value,
+    native_popup_border_color: $("nativePopupBorderColor").value,
+    native_popup_error_color: $("nativePopupErrorColor").value,
+  };
+}
+
+async function saveSubtitleConfig({ silent = false } = {}) {
+  $("saveSubtitleBtn").disabled = true;
+  try {
+    const result = await request("/admin/subtitle-config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subtitlePayload()),
+    });
+    state.subtitle = result.config;
+    $("subtitleResult").textContent = pretty(result);
+    if (!silent) toast("字幕设置已保存并立即生效");
+    await Promise.all([loadHealth(), loadSubtitleConfig()]);
+    return result;
+  } catch (error) {
+    $("subtitleResult").textContent = error.message;
+    toast(error.message, true);
+    throw error;
+  } finally {
+    $("saveSubtitleBtn").disabled = false;
   }
 }
 
@@ -510,13 +568,50 @@ async function sendTest() {
   }
 }
 
+function startSubtitlePositionWatch(previous) {
+  clearInterval(window.__subtitlePositionWatch);
+  const deadline = Date.now() + 90_000;
+  window.__subtitlePositionWatch = setInterval(async () => {
+    if (Date.now() > deadline) {
+      clearInterval(window.__subtitlePositionWatch);
+      return;
+    }
+    try {
+      const latest = await request("/admin/subtitle-config");
+      const changed = latest.native_popup_position === "custom" && (
+        latest.native_popup_custom_x !== previous.x ||
+        latest.native_popup_custom_y !== previous.y ||
+        previous.position !== "custom"
+      );
+      if (!changed) return;
+      $("nativePopupPosition").value = "custom";
+      $("nativePopupCustomX").value = latest.native_popup_custom_x;
+      $("nativePopupCustomY").value = latest.native_popup_custom_y;
+      $("nativePopupOffsetX").value = latest.native_popup_offset_x ?? 0;
+      $("nativePopupOffsetY").value = latest.native_popup_offset_y ?? 0;
+      state.subtitle = { ...(state.subtitle || {}), ...latest };
+      clearInterval(window.__subtitlePositionWatch);
+      toast(`字幕位置已保存：${latest.native_popup_custom_x}, ${latest.native_popup_custom_y}`);
+    } catch {
+      // The manual reload button remains available if polling is interrupted.
+    }
+  }, 800);
+}
+
 async function previewPopup() {
   $("previewPopupBtn").disabled = true;
   try {
+    await saveSubtitleConfig({ silent: true });
+    const previous = {
+      position: $("nativePopupPosition").value,
+      x: Number($("nativePopupCustomX").value),
+      y: Number($("nativePopupCustomY").value),
+    };
     await request("/admin/native-popup/preview", { method: "POST" });
-    toast("已发送流式字幕预览");
+    startSubtitlePositionWatch(previous);
+    toast("预览已打开；拖动字幕并松开鼠标即可自动保存位置");
   } catch (error) {
-    toast(error.message, true);
+    if (!error?.message) toast("无法打开字幕预览", true);
   } finally {
     $("previewPopupBtn").disabled = false;
   }
@@ -525,7 +620,7 @@ async function previewPopup() {
 async function refreshAll() {
   $("refreshAllBtn").disabled = true;
   try {
-    await Promise.all([loadHealth(), loadConfig(), loadPrompts()]);
+    await Promise.all([loadHealth(), loadConfig(), loadSubtitleConfig(), loadPrompts()]);
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -540,6 +635,17 @@ document.querySelectorAll(".nav-item[data-tab]").forEach((button) => {
 $("refreshAllBtn").addEventListener("click", refreshAll);
 $("testUpstreamBtn").addEventListener("click", testUpstream);
 $("saveConfigBtn").addEventListener("click", saveConfig);
+$("saveSubtitleBtn").addEventListener("click", () => {
+  saveSubtitleConfig().catch(() => {});
+});
+$("reloadSubtitleBtn").addEventListener("click", async () => {
+  try {
+    await loadSubtitleConfig();
+    toast("已读取字幕进程保存的位置");
+  } catch (error) {
+    toast(error.message, true);
+  }
+});
 $("previewPopupBtn").addEventListener("click", previewPopup);
 $("promptSelect").addEventListener("change", loadSelectedPrompt);
 $("promptContent").addEventListener("input", updatePromptStats);
@@ -552,6 +658,13 @@ $("promptFileInput").addEventListener("change", (event) => {
   importPromptFile(event.target.files?.[0]);
   event.target.value = "";
 });
+[
+  "nativePopupBackgroundColor",
+  "nativePopupTextColor",
+  "nativePopupMutedColor",
+  "nativePopupBorderColor",
+  "nativePopupErrorColor",
+].forEach((id) => $(id).addEventListener("input", updateSubtitleColorPreview));
 $("sendTestBtn").addEventListener("click", sendTest);
 
 refreshAll();

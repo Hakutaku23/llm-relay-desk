@@ -45,5 +45,7 @@ async def health(request: Request) -> dict[str, Any]:
         ),
         "native_popup_offset_x": config.get("native_popup_offset_x", 0),
         "native_popup_offset_y": config.get("native_popup_offset_y", 0),
+        "native_popup_custom_x": config.get("native_popup_custom_x", 120),
+        "native_popup_custom_y": config.get("native_popup_custom_y", 120),
         "native_popup_worker_alive": runtime.popup.is_alive(),
     }

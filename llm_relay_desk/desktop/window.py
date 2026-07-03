@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import queue
+import re
 import sys
 import tkinter as tk
 from multiprocessing.queues import Queue
@@ -14,11 +15,18 @@ DEFAULT_POPUP_CONFIG: dict[str, Any] = {
     "position": "bottom_center",
     "offset_x": 0,
     "offset_y": 0,
+    "custom_x": 120,
+    "custom_y": 120,
     "width": 960,
     "height": 220,
     "font_size": 24,
     "opacity": 0.88,
     "show_reasoning": False,
+    "background_color": "#101318",
+    "text_color": "#f7f8fa",
+    "muted_color": "#aeb6c2",
+    "border_color": "#343a46",
+    "error_color": "#ff8f9b",
 }
 
 POSITION_VALUES = {
@@ -31,15 +39,12 @@ POSITION_VALUES = {
     "bottom_left",
     "bottom_center",
     "bottom_right",
+    "custom",
 }
 
-BG = "#101318"
-TEXT = "#f7f8fa"
-MUTED = "#aeb6c2"
-BORDER = "#343a46"
-DANGER = "#ff8f9b"
 FONT_FAMILY = "Microsoft YaHei UI"
 DISPLAY_CHAR_LIMIT = 50_000
+HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def _int_value(value: Any, default: int, minimum: int, maximum: int) -> int:
@@ -58,6 +63,11 @@ def _float_value(value: Any, default: float, minimum: float, maximum: float) -> 
     return max(minimum, min(maximum, parsed))
 
 
+def _color_value(value: Any, default: str) -> str:
+    text = str(value or "").strip()
+    return text.lower() if HEX_COLOR_RE.fullmatch(text) else default
+
+
 def normalize_popup_config(value: dict[str, Any] | None) -> dict[str, Any]:
     source = value or {}
     position = str(source.get("position", DEFAULT_POPUP_CONFIG["position"]))
@@ -69,30 +79,30 @@ def normalize_popup_config(value: dict[str, Any] | None) -> dict[str, Any]:
         "position": position,
         "offset_x": _int_value(source.get("offset_x"), 0, -10000, 10000),
         "offset_y": _int_value(source.get("offset_y"), 0, -10000, 10000),
+        "custom_x": _int_value(source.get("custom_x"), 120, -10000, 10000),
+        "custom_y": _int_value(source.get("custom_y"), 120, -10000, 10000),
         "width": _int_value(source.get("width"), 960, 320, 2400),
         "height": _int_value(source.get("height"), 220, 100, 900),
         "font_size": _int_value(source.get("font_size"), 24, 12, 72),
         "opacity": _float_value(source.get("opacity"), 0.88, 0.30, 1.0),
         "show_reasoning": bool(source.get("show_reasoning", False)),
+        "background_color": _color_value(source.get("background_color"), "#101318"),
+        "text_color": _color_value(source.get("text_color"), "#f7f8fa"),
+        "muted_color": _color_value(source.get("muted_color"), "#aeb6c2"),
+        "border_color": _color_value(source.get("border_color"), "#343a46"),
+        "error_color": _color_value(source.get("error_color"), "#ff8f9b"),
     }
 
 
 def _virtual_screen(window: tk.Toplevel) -> tuple[int, int, int, int]:
-    """Return virtual desktop x, y, width and height.
-
-    Windows may use negative coordinates for a monitor placed left of the
-    primary display. Tk's winfo_screen* normally exposes only the primary
-    display, so use the Win32 virtual-screen metrics when available.
-    """
-
     if sys.platform == "win32":
         try:
             user32 = ctypes.windll.user32
             return (
-                int(user32.GetSystemMetrics(76)),  # SM_XVIRTUALSCREEN
-                int(user32.GetSystemMetrics(77)),  # SM_YVIRTUALSCREEN
-                int(user32.GetSystemMetrics(78)),  # SM_CXVIRTUALSCREEN
-                int(user32.GetSystemMetrics(79)),  # SM_CYVIRTUALSCREEN
+                int(user32.GetSystemMetrics(76)),
+                int(user32.GetSystemMetrics(77)),
+                int(user32.GetSystemMetrics(78)),
+                int(user32.GetSystemMetrics(79)),
             )
         except Exception:
             pass
@@ -100,20 +110,22 @@ def _virtual_screen(window: tk.Toplevel) -> tuple[int, int, int, int]:
 
 
 class SubtitleOverlay:
+    """Single reusable subtitle window for the latest active request."""
+
     def __init__(
         self,
         root: tk.Tk,
         event: dict[str, Any],
         config_getter: Callable[[], dict[str, Any]],
         on_destroy: Callable[[str, bool], None],
-        stack_index: int,
+        on_position_saved: Callable[[int, int], None],
     ) -> None:
         self.root = root
-        self.request_id = str(event.get("request_id", "unknown"))
-        self.model = str(event.get("model") or "模型响应")
         self.config_getter = config_getter
         self.on_destroy = on_destroy
-        self.stack_index = stack_index
+        self.on_position_saved = on_position_saved
+        self.request_id = ""
+        self.model = "模型响应"
         self.content_length = 0
         self.reasoning_length = 0
         self.reasoning_visible = False
@@ -121,51 +133,41 @@ class SubtitleOverlay:
         self.close_after_id: str | None = None
         self.countdown_after_id: str | None = None
         self.remaining_seconds = 0
+        self.drag_offset_x = 0
+        self.drag_offset_y = 0
+        self.dragging = False
 
         self.window = tk.Toplevel(root)
         self.window.withdraw()
         self.window.overrideredirect(True)
-        self.window.configure(bg=BG)
         self.window.attributes("-topmost", True)
 
         self._build()
-        self.apply_config()
+        self.reset(event)
         self._show_without_stealing_focus()
 
     def _build(self) -> None:
-        self.shell = tk.Frame(
-            self.window,
-            bg=BG,
-            highlightbackground=BORDER,
-            highlightthickness=1,
-            padx=18,
-            pady=12,
-        )
+        self.shell = tk.Frame(self.window, padx=18, pady=12)
         self.shell.pack(fill="both", expand=True)
 
-        header = tk.Frame(self.shell, bg=BG)
-        header.pack(fill="x", pady=(0, 6))
+        self.header = tk.Frame(self.shell)
+        self.header.pack(fill="x", pady=(0, 6))
 
         self.status_label = tk.Label(
-            header,
-            text=f"{self.model} · 正在生成",
-            bg=BG,
-            fg=MUTED,
+            self.header,
+            text="模型响应 · 正在生成",
             font=(FONT_FAMILY, 9),
             anchor="w",
+            cursor="fleur",
         )
         self.status_label.pack(side="left", fill="x", expand=True)
 
         self.close_button = tk.Button(
-            header,
+            self.header,
             text="×",
             command=lambda: self.destroy(manual=True),
             relief="flat",
             bd=0,
-            bg=BG,
-            fg=MUTED,
-            activebackground=BG,
-            activeforeground=TEXT,
             font=(FONT_FAMILY, 12),
             padx=4,
             pady=0,
@@ -177,71 +179,122 @@ class SubtitleOverlay:
         self.text = tk.Text(
             self.shell,
             wrap="word",
-            bg=BG,
-            fg=TEXT,
-            insertbackground=TEXT,
-            selectbackground="#3e4a60",
             relief="flat",
             bd=0,
             padx=0,
             pady=0,
             spacing1=2,
             spacing3=5,
-            cursor="arrow",
+            cursor="fleur",
             takefocus=False,
         )
         self.text.pack(fill="both", expand=True)
-        self.text.tag_configure("reasoning", foreground=MUTED)
-        self.text.tag_configure("error", foreground=DANGER)
         self.text.configure(state="disabled")
 
-        self._replace_text("正在等待模型输出……", tag="reasoning")
+        for widget in (self.shell, self.header, self.status_label, self.text):
+            widget.bind("<ButtonPress-1>", self._start_drag, add="+")
+            widget.bind("<B1-Motion>", self._drag, add="+")
+            widget.bind("<ButtonRelease-1>", self._finish_drag, add="+")
 
     def _popup_config(self) -> dict[str, Any]:
         return normalize_popup_config(self.config_getter())
 
+    def reset(self, event: dict[str, Any]) -> None:
+        self._cancel_auto_close()
+        self.request_id = str(event.get("request_id") or "unknown")
+        self.model = str(event.get("model") or "模型响应")
+        self.content_length = 0
+        self.reasoning_length = 0
+        self.reasoning_visible = False
+        self.finished = False
+        self.status_label.configure(text=f"{self.model} · 正在生成")
+        self._replace_text("正在等待模型输出……", tag="reasoning")
+        self.apply_config()
+        self._show_without_stealing_focus()
+
     def apply_config(self) -> None:
         config = self._popup_config()
+        bg = config["background_color"]
+        text_color = config["text_color"]
+        muted = config["muted_color"]
+        border = config["border_color"]
+        error = config["error_color"]
+
         try:
             self.window.attributes("-alpha", config["opacity"])
         except tk.TclError:
             pass
-        self.text.configure(font=(FONT_FAMILY, config["font_size"]))
+        self.window.configure(bg=bg)
+        self.shell.configure(bg=bg, highlightbackground=border, highlightthickness=1)
+        self.header.configure(bg=bg)
+        self.status_label.configure(bg=bg, fg=muted)
+        self.close_button.configure(
+            bg=bg,
+            fg=muted,
+            activebackground=bg,
+            activeforeground=text_color,
+        )
+        self.text.configure(
+            bg=bg,
+            fg=text_color,
+            insertbackground=text_color,
+            selectbackground=border,
+            font=(FONT_FAMILY, config["font_size"]),
+        )
+        self.text.tag_configure("reasoning", foreground=muted)
+        self.text.tag_configure("error", foreground=error)
         self._position_window(config)
 
     def _position_window(self, config: dict[str, Any]) -> None:
         width = int(config["width"])
         height = int(config["height"])
-        left, top, screen_width, screen_height = _virtual_screen(self.window)
-        margin = 36
         position = str(config["position"])
 
-        if position.endswith("_left"):
-            x = left + margin
-        elif position.endswith("_right"):
-            x = left + screen_width - width - margin
+        if position == "custom":
+            x = int(config["custom_x"])
+            y = int(config["custom_y"])
         else:
-            x = left + (screen_width - width) // 2
+            left, top, screen_width, screen_height = _virtual_screen(self.window)
+            margin = 36
+            if position.endswith("_left"):
+                x = left + margin
+            elif position.endswith("_right"):
+                x = left + screen_width - width - margin
+            else:
+                x = left + (screen_width - width) // 2
 
-        if position.startswith("top_"):
-            y = top + margin
-        elif position.startswith("bottom_"):
-            y = top + screen_height - height - margin
-        else:
-            y = top + (screen_height - height) // 2
+            if position.startswith("top_"):
+                y = top + margin
+            elif position.startswith("bottom_"):
+                y = top + screen_height - height - margin
+            else:
+                y = top + (screen_height - height) // 2
 
-        # Concurrent requests are offset minimally so their close controls remain
-        # reachable. The first active request stays at the exact configured point.
-        stack_offset = (self.stack_index % 4) * 14
-        if position.startswith("bottom_"):
-            y -= stack_offset
-        else:
-            y += stack_offset
-        x += stack_offset
+            x += int(config["offset_x"])
+            y += int(config["offset_y"])
 
-        x += int(config["offset_x"])
-        y += int(config["offset_y"])
         self.window.geometry(f"{width}x{height}{x:+d}{y:+d}")
+
+    def _start_drag(self, event: tk.Event) -> str:
+        self.dragging = True
+        self.drag_offset_x = int(event.x_root) - int(self.window.winfo_x())
+        self.drag_offset_y = int(event.y_root) - int(self.window.winfo_y())
+        return "break"
+
+    def _drag(self, event: tk.Event) -> str:
+        if not self.dragging:
+            return "break"
+        x = int(event.x_root) - self.drag_offset_x
+        y = int(event.y_root) - self.drag_offset_y
+        self.window.geometry(f"{x:+d}{y:+d}")
+        return "break"
+
+    def _finish_drag(self, _: tk.Event) -> str:
+        if not self.dragging:
+            return "break"
+        self.dragging = False
+        self.on_position_saved(int(self.window.winfo_x()), int(self.window.winfo_y()))
+        return "break"
 
     def _show_without_stealing_focus(self) -> None:
         self.window.update_idletasks()
@@ -401,22 +454,25 @@ class SubtitleOverlay:
         self.countdown_after_id = self.window.after(1000, self._update_countdown)
 
     def destroy(self, manual: bool = False) -> None:
+        request_id = self.request_id
         self._cancel_auto_close()
         try:
             self.window.destroy()
         except tk.TclError:
             pass
-        self.on_destroy(self.request_id, manual)
+        self.on_destroy(request_id, manual)
 
 
 class PopupAgent:
-    def __init__(self, event_queue: Queue) -> None:
+    def __init__(self, event_queue: Queue, control_queue: Queue | None = None) -> None:
         self.event_queue = event_queue
+        self.control_queue = control_queue
         self.config = normalize_popup_config(DEFAULT_POPUP_CONFIG)
-        self.windows: dict[str, SubtitleOverlay] = {}
+        self.popup: SubtitleOverlay | None = None
+        self.active_request_id: str | None = None
         self.pending_starts: dict[str, dict[str, Any]] = {}
         self.suppressed_requests: set[str] = set()
-        self.position_counter = 0
+        self.superseded_requests: set[str] = set()
 
         self.root = tk.Tk()
         self.root.withdraw()
@@ -455,12 +511,12 @@ class PopupAgent:
         if event_type == "popup_config":
             self.config = normalize_popup_config(event)
             if not self.config["enabled"]:
-                self._close_all()
+                self._close_popup()
                 self.pending_starts.clear()
                 self.suppressed_requests.clear()
-            else:
-                for popup in tuple(self.windows.values()):
-                    popup.reschedule_if_finished()
+                self.superseded_requests.clear()
+            elif self.popup is not None:
+                self.popup.reschedule_if_finished()
             return
 
         if not self.config["enabled"]:
@@ -470,86 +526,134 @@ class PopupAgent:
         if not request_id:
             return
 
+        if request_id in self.superseded_requests:
+            if event_type in {"request_done", "request_error", "request_cancelled"}:
+                self.superseded_requests.discard(request_id)
+                self.pending_starts.pop(request_id, None)
+            return
+
         if request_id in self.suppressed_requests:
             if event_type in {"request_done", "request_error", "request_cancelled"}:
                 self.suppressed_requests.discard(request_id)
                 self.pending_starts.pop(request_id, None)
             return
 
-        popup = self.windows.get(request_id)
         if event_type == "request_start":
+            # A single subtitle surface always follows the most recently started
+            # chat. Older pending requests are suppressed before their first chunk.
+            for pending_id in tuple(self.pending_starts):
+                if pending_id != request_id:
+                    self.pending_starts.pop(pending_id, None)
+                    self.superseded_requests.add(pending_id)
             self.pending_starts[request_id] = dict(event)
-            while len(self.pending_starts) > 200:
-                oldest = next(iter(self.pending_starts))
-                self.pending_starts.pop(oldest, None)
+            # When a previous subtitle is still visible, reuse it immediately so
+            # the old answer disappears as soon as the next chat starts. A first
+            # request still waits for its first response event before opening.
+            if self.popup is not None and self.active_request_id != request_id:
+                self._activate_request(request_id, event)
             return
 
-        if popup is None and event_type in {
+        if event_type not in {
             "content_delta",
             "reasoning_delta",
             "request_done",
             "request_error",
             "request_cancelled",
         }:
-            start_event = self.pending_starts.get(request_id) or {
-                "request_id": request_id,
-                "model": event.get("model", "模型响应"),
-                "api": "api",
-                "source": "本机",
-            }
-            popup = self._create_popup(start_event)
+            return
 
-        if popup is None:
+        if self.active_request_id != request_id:
+            self._activate_request(request_id, event)
+
+        if self.popup is None or self.active_request_id != request_id:
             return
 
         if event_type == "content_delta":
-            popup.append_content(str(event.get("text", "")))
+            self.popup.append_content(str(event.get("text", "")))
         elif event_type == "reasoning_delta":
-            popup.append_reasoning(str(event.get("text", "")))
+            self.popup.append_reasoning(str(event.get("text", "")))
         elif event_type == "request_done":
-            popup.complete(event)
+            self.popup.complete(event)
         elif event_type in {"request_error", "request_cancelled"}:
-            popup.fail(event)
+            self.popup.fail(event)
 
-    def _create_popup(self, event: dict[str, Any]) -> SubtitleOverlay:
-        request_id = str(event.get("request_id"))
-        existing = self.windows.get(request_id)
-        if existing:
-            return existing
-        popup = SubtitleOverlay(
-            self.root,
-            event,
-            config_getter=lambda: self.config,
-            on_destroy=self._remove_popup,
-            stack_index=self.position_counter,
-        )
-        self.position_counter += 1
-        self.windows[request_id] = popup
+    def _activate_request(self, request_id: str, event: dict[str, Any]) -> None:
+        previous = self.active_request_id
+        if (
+            previous
+            and previous != request_id
+            and self.popup is not None
+            and not self.popup.finished
+        ):
+            self.superseded_requests.add(previous)
+
+        start_event = self.pending_starts.get(request_id) or {
+            "request_id": request_id,
+            "model": event.get("model", "模型响应"),
+            "api": "api",
+            "source": "本机",
+        }
+        if self.popup is None:
+            self.popup = SubtitleOverlay(
+                self.root,
+                start_event,
+                config_getter=lambda: self.config,
+                on_destroy=self._remove_popup,
+                on_position_saved=self._save_position,
+            )
+        else:
+            self.popup.reset(start_event)
+        self.active_request_id = request_id
         self.pending_starts.pop(request_id, None)
-        return popup
+
+    def _save_position(self, x: int, y: int) -> None:
+        self.config = {
+            **self.config,
+            "position": "custom",
+            "custom_x": int(x),
+            "custom_y": int(y),
+            "offset_x": 0,
+            "offset_y": 0,
+        }
+        if self.control_queue is None:
+            return
+        try:
+            self.control_queue.put_nowait(
+                {
+                    "type": "popup_position_saved",
+                    "x": int(x),
+                    "y": int(y),
+                }
+            )
+        except (queue.Full, BrokenPipeError, EOFError, OSError):
+            pass
 
     def _remove_popup(self, request_id: str, manual: bool) -> None:
-        self.windows.pop(request_id, None)
+        self.popup = None
+        if self.active_request_id == request_id:
+            self.active_request_id = None
         self.pending_starts.pop(request_id, None)
         if manual:
             self.suppressed_requests.add(request_id)
 
-    def _close_all(self) -> None:
-        for popup in tuple(self.windows.values()):
+    def _close_popup(self) -> None:
+        popup = self.popup
+        self.popup = None
+        self.active_request_id = None
+        if popup is not None:
             popup.destroy(manual=False)
-        self.windows.clear()
 
     def _shutdown(self) -> None:
-        self._close_all()
+        self._close_popup()
         try:
             self.root.destroy()
         except tk.TclError:
             pass
 
 
-def run_popup_worker(event_queue: Queue) -> None:
+def run_popup_worker(event_queue: Queue, control_queue: Queue | None = None) -> None:
     try:
-        PopupAgent(event_queue).run()
+        PopupAgent(event_queue, control_queue).run()
     except tk.TclError as exc:
         print(f"[native-popup] 无法创建桌面字幕窗口：{exc}", file=sys.stderr, flush=True)
     except Exception as exc:

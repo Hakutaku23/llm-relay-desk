@@ -29,3 +29,27 @@ def test_validate_config_rejects_invalid_popup_position(tmp_path: Path) -> None:
     with pytest.raises(HTTPException) as exc_info:
         validate_config(store, {"native_popup_position": "somewhere"})
     assert exc_info.value.status_code == 400
+
+
+def test_validate_config_accepts_custom_position_and_colors(tmp_path: Path) -> None:
+    store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
+    result = validate_config(
+        store,
+        {
+            "native_popup_position": "custom",
+            "native_popup_custom_x": -220,
+            "native_popup_custom_y": 160,
+            "native_popup_background_color": "#AABBCC",
+            "native_popup_text_color": "#001122",
+        },
+    )
+    assert result["native_popup_position"] == "custom"
+    assert result["native_popup_custom_x"] == -220
+    assert result["native_popup_background_color"] == "#aabbcc"
+
+
+def test_validate_config_rejects_invalid_color(tmp_path: Path) -> None:
+    store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
+    with pytest.raises(HTTPException) as exc_info:
+        validate_config(store, {"native_popup_text_color": "white"})
+    assert exc_info.value.status_code == 400

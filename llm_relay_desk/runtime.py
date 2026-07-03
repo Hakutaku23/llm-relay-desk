@@ -28,7 +28,18 @@ class Runtime:
         if any(key not in existing_config for key in DEFAULT_CONFIG):
             config_store.write({**DEFAULT_CONFIG, **existing_config})
 
-        popup = NativePopupController()
+        def save_popup_position(x: int, y: int) -> None:
+            config_store.update(
+                {
+                    "native_popup_position": "custom",
+                    "native_popup_custom_x": int(x),
+                    "native_popup_custom_y": int(y),
+                    "native_popup_offset_x": 0,
+                    "native_popup_offset_y": 0,
+                }
+            )
+
+        popup = NativePopupController(on_position_saved=save_popup_position)
         monitor = MonitorHub(sinks=[popup.publish])
         return cls(
             settings=settings,

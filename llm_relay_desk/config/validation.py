@@ -17,6 +17,7 @@ POPUP_POSITIONS = {
     "bottom_left",
     "bottom_center",
     "bottom_right",
+    "custom",
 }
 
 
@@ -50,6 +51,13 @@ def _bounded_int(
             status_code=400,
             detail=f"{label}范围为 {minimum}～{maximum}",
         )
+    return value
+
+
+def _hex_color(updated: dict[str, Any], key: str, default: str, label: str) -> str:
+    value = str(updated.get(key, default)).strip().lower()
+    if not re.fullmatch(r"#[0-9a-f]{6}", value):
+        raise HTTPException(status_code=400, detail=f"{label}必须为 #RRGGBB 格式")
     return value
 
 
@@ -108,6 +116,12 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
     updated["native_popup_offset_y"] = _bounded_int(
         updated, "native_popup_offset_y", 0, -10000, 10000, "字幕垂直偏移"
     )
+    updated["native_popup_custom_x"] = _bounded_int(
+        updated, "native_popup_custom_x", 120, -10000, 10000, "字幕自定义 X 坐标"
+    )
+    updated["native_popup_custom_y"] = _bounded_int(
+        updated, "native_popup_custom_y", 120, -10000, 10000, "字幕自定义 Y 坐标"
+    )
     updated["native_popup_width"] = _bounded_int(
         updated, "native_popup_width", 960, 320, 2400, "字幕宽度"
     )
@@ -127,6 +141,21 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
     updated["native_popup_opacity"] = round(opacity, 2)
     updated["native_popup_show_reasoning"] = bool(
         updated.get("native_popup_show_reasoning", False)
+    )
+    updated["native_popup_background_color"] = _hex_color(
+        updated, "native_popup_background_color", "#101318", "字幕背景颜色"
+    )
+    updated["native_popup_text_color"] = _hex_color(
+        updated, "native_popup_text_color", "#f7f8fa", "字幕正文颜色"
+    )
+    updated["native_popup_muted_color"] = _hex_color(
+        updated, "native_popup_muted_color", "#aeb6c2", "字幕辅助文字颜色"
+    )
+    updated["native_popup_border_color"] = _hex_color(
+        updated, "native_popup_border_color", "#343a46", "字幕边框颜色"
+    )
+    updated["native_popup_error_color"] = _hex_color(
+        updated, "native_popup_error_color", "#ff8f9b", "字幕错误颜色"
     )
 
     if not updated["default_model"]:

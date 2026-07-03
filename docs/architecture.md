@@ -32,3 +32,16 @@ routes → proxy/services → monitoring/storage
 - OpenAI SSE 和 Ollama NDJSON 必须按原始字节流返回调用方。
 - `app.py` 仅保留应用实例与命令行启动逻辑。
 - 新增功能应优先放入已有领域目录，避免重新堆回入口文件。
+
+## 字幕单实例与位置回写
+
+桌面字幕进程只维护一个 `SubtitleOverlay`。当新的请求获得显示权时，窗口对象被复用，旧文本与关闭倒计时被清空；被替代请求的后续事件在桌面进程内丢弃，避免并发响应串台。
+
+字幕事件仍通过主进程到桌面进程的有界队列单向发送。拖动位置使用第二条反向控制队列：
+
+```text
+API 主进程  ── response events ──▶  字幕进程
+API 主进程  ◀─ saved position  ───  字幕进程
+```
+
+鼠标释放后，字幕进程发送绝对 X/Y 坐标；`NativePopupController` 的控制线程调用运行期回调，将 `native_popup_position=custom` 与坐标原子写入 `data/config.json`。位置回写失败不会阻塞 API 转发。

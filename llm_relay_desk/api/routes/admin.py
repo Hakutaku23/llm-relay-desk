@@ -16,6 +16,30 @@ from llm_relay_desk.proxy.common import timeout_config, upstream_headers
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+SUBTITLE_CONFIG_KEYS = {
+    "native_popup_enabled",
+    "native_popup_close_seconds",
+    "native_popup_position",
+    "native_popup_offset_x",
+    "native_popup_offset_y",
+    "native_popup_custom_x",
+    "native_popup_custom_y",
+    "native_popup_width",
+    "native_popup_height",
+    "native_popup_font_size",
+    "native_popup_opacity",
+    "native_popup_show_reasoning",
+    "native_popup_background_color",
+    "native_popup_text_color",
+    "native_popup_muted_color",
+    "native_popup_border_color",
+    "native_popup_error_color",
+}
+
+
+def _subtitle_config(config: dict[str, Any]) -> dict[str, Any]:
+    return {key: config.get(key) for key in SUBTITLE_CONFIG_KEYS}
+
 
 @router.delete("/monitor/history")
 async def clear_monitor_history(request: Request) -> dict[str, Any]:
@@ -39,6 +63,28 @@ async def put_config(
     runtime.config_store.write(updated)
     runtime.popup.configure(updated)
     return {"ok": True, "config": updated}
+
+
+@router.get("/subtitle-config")
+async def get_subtitle_config(request: Request) -> dict[str, Any]:
+    return _subtitle_config(runtime_from_request(request).config_store.read())
+
+
+@router.put("/subtitle-config")
+async def put_subtitle_config(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    runtime = runtime_from_request(request)
+    filtered = {
+        key: value
+        for key, value in payload.items()
+        if key in SUBTITLE_CONFIG_KEYS
+    }
+    updated = validate_config(runtime.config_store, filtered)
+    runtime.config_store.write(updated)
+    runtime.popup.configure(updated)
+    return {"ok": True, "config": _subtitle_config(updated)}
 
 
 @router.post("/native-popup/preview")

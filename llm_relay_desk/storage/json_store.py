@@ -39,3 +39,11 @@ class JsonStore:
         with self.lock:
             atomic_write_json(self.path, value)
             return value
+
+    def update(self, values: dict[str, Any]) -> dict[str, Any]:
+        """Atomically merge selected keys into the current JSON object."""
+        with self.lock:
+            current = self.read()
+            updated = {**current, **values}
+            atomic_write_json(self.path, updated)
+            return updated

@@ -401,3 +401,59 @@ textarea { resize: vertical; }
 @media (max-width: 640px) {
   .inline-inputs { grid-template-columns: 1fr; }
 }
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.color-field {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-soft);
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.color-field input[type="color"] {
+  width: 100%;
+  height: 44px;
+  padding: 3px;
+  cursor: pointer;
+}
+
+.subtitle-preview {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 18px 20px;
+  border: 1px solid #343a46;
+  border-radius: 12px;
+  background: #101318;
+  color: #f7f8fa;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.subtitle-preview small {
+  color: #aeb6c2;
+  font-size: 12px;
+}
+
+.subtitle-preview strong {
+  font-size: 20px;
+  font-weight: 500;
+}
+
+@media (max-width: 1100px) {
+  .color-grid { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .color-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+}

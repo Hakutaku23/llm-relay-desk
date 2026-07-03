@@ -29,8 +29,13 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
     with TestClient(app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "4.0.0"
-        assert client.get("/ui/").status_code == 200
+        assert health.json()["version"] == "4.1.0"
+        ui = client.get("/ui/")
+        assert ui.status_code == 200
+        assert "data-tab=\"subtitle\"" in ui.text
+        assert "nativePopupBackgroundColor" in ui.text
+        config_section = ui.text.split('id="tab-config"', 1)[1].split('id="tab-subtitle"', 1)[0]
+        assert "nativePopupEnabled" not in config_section
         assert client.get("/monitor/").status_code == 200
 
 
@@ -46,6 +51,8 @@ def test_route_contract_is_preserved(tmp_path: Path) -> None:
         ("/ws/monitor", "WEBSOCKET"),
         ("/admin/config", "GET"),
         ("/admin/config", "PUT"),
+        ("/admin/subtitle-config", "GET"),
+        ("/admin/subtitle-config", "PUT"),
         ("/admin/prompts", "GET"),
         ("/api/chat", "POST"),
         ("/api/generate", "POST"),
@@ -53,3 +60,31 @@ def test_route_contract_is_preserved(tmp_path: Path) -> None:
         ("/v1/chat/completions", "POST"),
     }
     assert expected <= route_keys
+
+
+def test_subtitle_config_endpoint(tmp_path: Path) -> None:
+    app = create_app(make_settings(tmp_path))
+    config = app.state.runtime.config_store.read()
+    config["native_popup_enabled"] = False
+    app.state.runtime.config_store.write(config)
+
+    with TestClient(app) as client:
+        response = client.put(
+            "/admin/subtitle-config",
+            json={
+                "native_popup_enabled": False,
+                "native_popup_position": "custom",
+                "native_popup_custom_x": 321,
+                "native_popup_custom_y": -45,
+                "native_popup_background_color": "#112233",
+                "native_popup_text_color": "#abcdef",
+            },
+        )
+        assert response.status_code == 200
+        subtitle = client.get("/admin/subtitle-config").json()
+        assert subtitle["native_popup_position"] == "custom"
+        assert subtitle["native_popup_custom_x"] == 321
+        assert subtitle["native_popup_custom_y"] == -45
+        assert subtitle["native_popup_background_color"] == "#112233"
+        assert subtitle["native_popup_text_color"] == "#abcdef"
+        assert "upstream_api_key" not in subtitle

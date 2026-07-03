@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LLM Relay Desk</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=4.0.0">
+  <link rel="stylesheet" href="/ui/styles.css?v=4.1.0">
 </head>
 <body>
   <div class="shell">
@@ -13,13 +13,14 @@
         <div class="logo">R</div>
         <div>
           <h1>LLM Relay Desk</h1>
-          <p>API 转发与提示词管理</p>
+          <p>API 转发、字幕与提示词</p>
         </div>
       </div>
 
       <nav>
         <button class="nav-item active" data-tab="status">服务状态</button>
         <button class="nav-item" data-tab="config">转发配置</button>
+        <button class="nav-item" data-tab="subtitle">字幕设置</button>
         <button class="nav-item" data-tab="prompts">提示词管理</button>
         <button class="nav-item" data-tab="test">API 测试</button>
         <a class="nav-item nav-link" href="/monitor/" target="_blank" rel="noopener">实时响应 ↗</a>
@@ -142,21 +143,48 @@
                 <span class="slider"></span>
               </label>
             </div>
-            <div class="field switch-field popup-setting">
-              <label>原生字幕浮层</label>
+          </div>
+
+          <div class="notice">
+            本地监听端口由 <code>.env</code> 中的 <code>APP_PORT</code> 决定，
+            修改后需要重启；字幕外观、位置和关闭策略已移动到独立的“字幕设置”选项卡。
+          </div>
+          <pre class="result compact" id="configResult">尚未保存。</pre>
+        </div>
+      </section>
+
+
+      <section class="tab-panel" id="tab-subtitle">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <h3>原生字幕浮层</h3>
+              <p>配置字幕外观、固定位置与单窗口复用策略。</p>
+            </div>
+            <div class="actions">
+              <button class="secondary" id="reloadSubtitleBtn" type="button">读取已保存位置</button>
+              <button class="secondary" id="previewPopupBtn" type="button">预览并拖动</button>
+              <button class="primary" id="saveSubtitleBtn" type="button">保存字幕设置</button>
+            </div>
+          </div>
+
+          <div class="form-grid two">
+            <div class="field switch-field">
+              <label>启用原生字幕浮层</label>
               <label class="switch">
                 <input id="nativePopupEnabled" type="checkbox">
                 <span class="slider"></span>
               </label>
-              <small>无标题栏、置顶但不主动抢焦点；收到流式正文时逐段显示。</small>
+              <small>字幕进程与 API 转发隔离，关闭后不影响 API 或 Web 监视器。</small>
             </div>
-            <div class="field popup-setting">
+            <div class="field">
               <label for="nativePopupCloseSeconds">响应完成后自动关闭（秒）</label>
               <input id="nativePopupCloseSeconds" type="number" min="1" max="3600" value="30">
-              <small>收到结束事件后开始倒计时，范围 1～3600 秒。</small>
+              <small>新请求在窗口关闭前到来时，会清空并复用同一个字幕框。</small>
             </div>
-            <div class="field popup-setting">
-              <label for="nativePopupPosition">字幕固定位置</label>
+
+            <div class="field">
+              <label for="nativePopupPosition">初始位置</label>
               <select id="nativePopupPosition">
                 <option value="top_left">左上</option>
                 <option value="top_center">顶部居中</option>
@@ -167,18 +195,27 @@
                 <option value="bottom_left">左下</option>
                 <option value="bottom_center">底部居中</option>
                 <option value="bottom_right">右下</option>
+                <option value="custom">自定义（拖动后自动保存）</option>
               </select>
-              <small>以整个虚拟桌面为基准，多显示器可再使用偏移量微调。</small>
+              <small>点击“预览并拖动”，拖到目标位置后松开鼠标，坐标会自动写入配置。</small>
             </div>
-            <div class="field popup-setting position-offsets">
-              <label>位置偏移（像素）</label>
+            <div class="field">
+              <label>已保存的绝对坐标</label>
+              <div class="inline-inputs">
+                <input id="nativePopupCustomX" type="number" min="-10000" max="10000" value="120" aria-label="字幕绝对 X 坐标">
+                <input id="nativePopupCustomY" type="number" min="-10000" max="10000" value="120" aria-label="字幕绝对 Y 坐标">
+              </div>
+              <small>左框为 X，右框为 Y；拖动字幕后会自动切换为自定义位置。</small>
+            </div>
+            <div class="field position-offsets">
+              <label>预设位置偏移（像素）</label>
               <div class="inline-inputs">
                 <input id="nativePopupOffsetX" type="number" min="-10000" max="10000" value="0" aria-label="水平偏移">
                 <input id="nativePopupOffsetY" type="number" min="-10000" max="10000" value="0" aria-label="垂直偏移">
               </div>
-              <small>左框为 X：正数向右；右框为 Y：正数向下。</small>
+              <small>仅在九宫格预设位置下生效。</small>
             </div>
-            <div class="field popup-setting">
+            <div class="field">
               <label>字幕尺寸（像素）</label>
               <div class="inline-inputs">
                 <input id="nativePopupWidth" type="number" min="320" max="2400" value="960" aria-label="字幕宽度">
@@ -186,34 +223,62 @@
               </div>
               <small>左框为宽度，右框为高度。</small>
             </div>
-            <div class="field popup-setting">
+            <div class="field">
               <label>字幕字号与透明度</label>
               <div class="inline-inputs">
                 <input id="nativePopupFontSize" type="number" min="12" max="72" value="24" aria-label="字幕字号">
                 <input id="nativePopupOpacity" type="number" min="0.30" max="1.00" step="0.05" value="0.88" aria-label="字幕透明度">
               </div>
-              <small>左框为字号；右框为整体透明度，范围 0.30～1.00。</small>
+              <small>透明度范围为 0.30～1.00。</small>
             </div>
-            <div class="field switch-field popup-setting">
+            <div class="field switch-field">
               <label>字幕中显示推理内容</label>
               <label class="switch">
                 <input id="nativePopupShowReasoning" type="checkbox">
                 <span class="slider"></span>
               </label>
-              <small>默认关闭。关闭时只显示“正在思考”，不泄露 reasoning 文本。</small>
-            </div>
-            <div class="field popup-setting preview-field">
-              <label>位置预览</label>
-              <button class="secondary" id="previewPopupBtn" type="button">预览流式字幕</button>
-              <small>先保存配置，再用预览确认固定位置和尺寸。</small>
+              <small>默认关闭，只显示“正在思考”，避免暴露 reasoning 文本。</small>
             </div>
           </div>
+        </div>
 
-          <div class="notice">
-            本地监听端口由 <code>.env</code> 中的 <code>APP_PORT</code> 决定，
-            修改后需要重启；原生字幕浮层仅在已登录的桌面会话中可用，关闭该功能不会影响 API 或 Web 实时监视器。
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <h3>颜色主题</h3>
+              <p>颜色使用 #RRGGBB 格式，保存后对当前字幕立即生效。</p>
+            </div>
           </div>
-          <pre class="result compact" id="configResult">尚未保存。</pre>
+          <div class="color-grid">
+            <label class="color-field">
+              <span>背景颜色</span>
+              <input id="nativePopupBackgroundColor" type="color" value="#101318">
+            </label>
+            <label class="color-field">
+              <span>正文颜色</span>
+              <input id="nativePopupTextColor" type="color" value="#f7f8fa">
+            </label>
+            <label class="color-field">
+              <span>辅助文字</span>
+              <input id="nativePopupMutedColor" type="color" value="#aeb6c2">
+            </label>
+            <label class="color-field">
+              <span>边框颜色</span>
+              <input id="nativePopupBorderColor" type="color" value="#343a46">
+            </label>
+            <label class="color-field">
+              <span>错误颜色</span>
+              <input id="nativePopupErrorColor" type="color" value="#ff8f9b">
+            </label>
+          </div>
+          <div class="subtitle-preview" id="subtitleColorPreview">
+            <small>字幕预览 · 正在生成</small>
+            <strong>这是一段字幕颜色预览文本。</strong>
+          </div>
+          <div class="notice">
+            屏幕上始终只有一个字幕框。新请求会获得显示权，旧请求尚未结束的后续分片不会再写入字幕，避免并发响应互相覆盖。
+          </div>
+          <pre class="result compact" id="subtitleResult">尚未保存。</pre>
         </div>
       </section>
 
@@ -306,6 +371,6 @@
     </main>
   </div>
 
-  <script src="/ui/app.js?v=4.0.0"></script>
+  <script src="/ui/app.js?v=4.1.0"></script>
 </body>
 </html>
