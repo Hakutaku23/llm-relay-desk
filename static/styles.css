@@ -380,3 +380,24 @@ textarea { resize: vertical; }
 }
 
 .nav-link { display: block; text-decoration: none; }
+
+.inline-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.preview-field button {
+  justify-self: start;
+}
+
+.test-stream-setting {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 13px 14px;
+  background: var(--panel-soft);
+}
+
+@media (max-width: 640px) {
+  .inline-inputs { grid-template-columns: 1fr; }
+}

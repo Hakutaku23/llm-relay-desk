@@ -44,6 +44,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "prompt_enabled": True,
     "native_popup_enabled": True,
     "native_popup_close_seconds": 30,
+    "native_popup_position": "bottom_center",
+    "native_popup_offset_x": 0,
+    "native_popup_offset_y": 0,
+    "native_popup_width": 960,
+    "native_popup_height": 220,
+    "native_popup_font_size": 24,
+    "native_popup_opacity": 0.88,
+    "native_popup_show_reasoning": False,
 }
 
 DEFAULT_PROMPTS: dict[str, Any] = {
@@ -114,6 +122,7 @@ class NativePopupController:
         self.queue_size = queue_size
         self.enabled = False
         self.close_seconds = 30
+        self.popup_config: dict[str, Any] = {}
         self.event_queue: Any = None
         self.process: multiprocessing.Process | None = None
         self.lock = threading.RLock()
@@ -127,19 +136,28 @@ class NativePopupController:
             close_seconds = 30
         close_seconds = max(1, min(3600, close_seconds))
 
+        popup_config = {
+            "type": "popup_config",
+            "enabled": enabled,
+            "close_seconds": close_seconds,
+            "position": str(config.get("native_popup_position", "bottom_center")),
+            "offset_x": int(config.get("native_popup_offset_x", 0)),
+            "offset_y": int(config.get("native_popup_offset_y", 0)),
+            "width": int(config.get("native_popup_width", 960)),
+            "height": int(config.get("native_popup_height", 220)),
+            "font_size": int(config.get("native_popup_font_size", 24)),
+            "opacity": float(config.get("native_popup_opacity", 0.88)),
+            "show_reasoning": bool(config.get("native_popup_show_reasoning", False)),
+        }
+
         with self.lock:
             self.enabled = enabled
             self.close_seconds = close_seconds
+            self.popup_config = popup_config
             if enabled:
                 self._ensure_process_locked()
             if self.event_queue is not None:
-                self._put_locked(
-                    {
-                        "type": "popup_config",
-                        "enabled": enabled,
-                        "close_seconds": close_seconds,
-                    }
-                )
+                self._put_locked(dict(popup_config))
 
     def publish(self, event: dict[str, Any]) -> None:
         if not self.enabled:
@@ -191,13 +209,8 @@ class NativePopupController:
             process.start()
             self.event_queue = event_queue
             self.process = process
-            self._put_locked(
-                {
-                    "type": "popup_config",
-                    "enabled": self.enabled,
-                    "close_seconds": self.close_seconds,
-                }
-            )
+            if self.popup_config:
+                self._put_locked(dict(self.popup_config))
         except Exception as exc:
             print(f"[native-popup] 启动失败：{exc}", flush=True)
             self._dispose_locked()
@@ -424,6 +437,51 @@ def validate_config(payload: dict[str, Any]) -> dict[str, Any]:
     if popup_close_seconds < 1 or popup_close_seconds > 3600:
         raise HTTPException(status_code=400, detail="弹窗自动关闭时间范围为 1～3600 秒")
     updated["native_popup_close_seconds"] = popup_close_seconds
+
+    popup_positions = {
+        "top_left", "top_center", "top_right",
+        "center_left", "center", "center_right",
+        "bottom_left", "bottom_center", "bottom_right",
+    }
+    popup_position = str(updated.get("native_popup_position", "bottom_center")).strip()
+    if popup_position not in popup_positions:
+        raise HTTPException(status_code=400, detail="字幕位置参数无效")
+    updated["native_popup_position"] = popup_position
+
+    def popup_int(key: str, default: int, minimum: int, maximum: int, label: str) -> int:
+        try:
+            value = int(updated.get(key, default))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=f"{label}必须为整数") from exc
+        if value < minimum or value > maximum:
+            raise HTTPException(status_code=400, detail=f"{label}范围为 {minimum}～{maximum}")
+        return value
+
+    updated["native_popup_offset_x"] = popup_int(
+        "native_popup_offset_x", 0, -10000, 10000, "字幕水平偏移"
+    )
+    updated["native_popup_offset_y"] = popup_int(
+        "native_popup_offset_y", 0, -10000, 10000, "字幕垂直偏移"
+    )
+    updated["native_popup_width"] = popup_int(
+        "native_popup_width", 960, 320, 2400, "字幕宽度"
+    )
+    updated["native_popup_height"] = popup_int(
+        "native_popup_height", 220, 100, 900, "字幕高度"
+    )
+    updated["native_popup_font_size"] = popup_int(
+        "native_popup_font_size", 24, 12, 72, "字幕字号"
+    )
+    try:
+        popup_opacity = float(updated.get("native_popup_opacity", 0.88))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="字幕透明度必须为数字") from exc
+    if popup_opacity < 0.30 or popup_opacity > 1.0:
+        raise HTTPException(status_code=400, detail="字幕透明度范围为 0.30～1.00")
+    updated["native_popup_opacity"] = round(popup_opacity, 2)
+    updated["native_popup_show_reasoning"] = bool(
+        updated.get("native_popup_show_reasoning", False)
+    )
 
     if not updated["default_model"]:
         raise HTTPException(status_code=400, detail="默认模型不能为空")
@@ -884,8 +942,8 @@ async def forward_native_request(
 
 app = FastAPI(
     title="LLM Relay Desk",
-    version="3.1.0",
-    description="本地 LLM API 转发、提示词管理、Web 监视器与原生响应弹窗",
+    version="3.2.0",
+    description="本地 LLM API 转发、提示词管理、Web 监视器与原生字幕浮层",
 )
 
 app.add_middleware(
@@ -932,6 +990,9 @@ async def health() -> dict[str, Any]:
         "monitor_clients": len(monitor_hub.subscribers),
         "native_popup_enabled": config.get("native_popup_enabled", True),
         "native_popup_close_seconds": config.get("native_popup_close_seconds", 30),
+        "native_popup_position": config.get("native_popup_position", "bottom_center"),
+        "native_popup_offset_x": config.get("native_popup_offset_x", 0),
+        "native_popup_offset_y": config.get("native_popup_offset_y", 0),
         "native_popup_worker_alive": native_popup_controller.is_alive(),
     }
 
@@ -971,6 +1032,48 @@ async def admin_put_config(payload: dict[str, Any] = Body(...)) -> dict[str, Any
     config_store.write(updated)
     native_popup_controller.configure(updated)
     return {"ok": True, "config": updated}
+
+
+@app.post("/admin/native-popup/preview")
+async def admin_preview_native_popup() -> dict[str, Any]:
+    config = config_store.read()
+    native_popup_controller.configure(config)
+    if not config.get("native_popup_enabled", True):
+        raise HTTPException(status_code=409, detail="请先开启原生字幕浮层并保存配置")
+
+    request_id = f"preview_{uuid.uuid4().hex[:12]}"
+
+    async def emit_preview() -> None:
+        native_popup_controller.publish(
+            {
+                "type": "request_start",
+                "request_id": request_id,
+                "api": "preview",
+                "route": "/admin/native-popup/preview",
+                "model": "字幕位置预览",
+                "source": "管理界面",
+                "user_agent": "LLM Relay Desk",
+                "stream": True,
+                "started_at": utc_now_iso(),
+            }
+        )
+        for text in ("这是一个", "固定位置的", "流式字幕预览。"):
+            await asyncio.sleep(0.18)
+            native_popup_controller.publish(
+                {"type": "content_delta", "request_id": request_id, "text": text}
+            )
+        native_popup_controller.publish(
+            {
+                "type": "request_done",
+                "request_id": request_id,
+                "finished_at": utc_now_iso(),
+                "elapsed_ms": 540,
+                "status_code": 200,
+            }
+        )
+
+    asyncio.create_task(emit_preview())
+    return {"ok": True, "request_id": request_id}
 
 
 @app.get("/admin/prompts")

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LLM Relay Desk</title>
-  <link rel="stylesheet" href="/ui/styles.css">
+  <link rel="stylesheet" href="/ui/styles.css?v=3.2.0">
 </head>
 <body>
   <div class="shell">
@@ -58,7 +58,7 @@
             <small id="promptLengthValue">--</small>
           </article>
           <article class="metric-card">
-            <span>原生响应弹窗</span>
+            <span>原生字幕浮层</span>
             <strong id="nativePopupStatus">--</strong>
             <small id="nativePopupDetail">--</small>
           </article>
@@ -143,23 +143,75 @@
               </label>
             </div>
             <div class="field switch-field popup-setting">
-              <label>原生响应弹窗</label>
+              <label>原生字幕浮层</label>
               <label class="switch">
                 <input id="nativePopupEnabled" type="checkbox">
                 <span class="slider"></span>
               </label>
-              <small>收到聊天响应时显示独立桌面窗口，不打开浏览器页面。</small>
+              <small>无标题栏、置顶但不主动抢焦点；收到流式正文时逐段显示。</small>
             </div>
             <div class="field popup-setting">
               <label for="nativePopupCloseSeconds">响应完成后自动关闭（秒）</label>
               <input id="nativePopupCloseSeconds" type="number" min="1" max="3600" value="30">
-              <small>从完整响应接收完成后开始倒计时，范围 1～3600 秒。</small>
+              <small>收到结束事件后开始倒计时，范围 1～3600 秒。</small>
+            </div>
+            <div class="field popup-setting">
+              <label for="nativePopupPosition">字幕固定位置</label>
+              <select id="nativePopupPosition">
+                <option value="top_left">左上</option>
+                <option value="top_center">顶部居中</option>
+                <option value="top_right">右上</option>
+                <option value="center_left">左侧居中</option>
+                <option value="center">屏幕中央</option>
+                <option value="center_right">右侧居中</option>
+                <option value="bottom_left">左下</option>
+                <option value="bottom_center">底部居中</option>
+                <option value="bottom_right">右下</option>
+              </select>
+              <small>以整个虚拟桌面为基准，多显示器可再使用偏移量微调。</small>
+            </div>
+            <div class="field popup-setting position-offsets">
+              <label>位置偏移（像素）</label>
+              <div class="inline-inputs">
+                <input id="nativePopupOffsetX" type="number" min="-10000" max="10000" value="0" aria-label="水平偏移">
+                <input id="nativePopupOffsetY" type="number" min="-10000" max="10000" value="0" aria-label="垂直偏移">
+              </div>
+              <small>左框为 X：正数向右；右框为 Y：正数向下。</small>
+            </div>
+            <div class="field popup-setting">
+              <label>字幕尺寸（像素）</label>
+              <div class="inline-inputs">
+                <input id="nativePopupWidth" type="number" min="320" max="2400" value="960" aria-label="字幕宽度">
+                <input id="nativePopupHeight" type="number" min="100" max="900" value="220" aria-label="字幕高度">
+              </div>
+              <small>左框为宽度，右框为高度。</small>
+            </div>
+            <div class="field popup-setting">
+              <label>字幕字号与透明度</label>
+              <div class="inline-inputs">
+                <input id="nativePopupFontSize" type="number" min="12" max="72" value="24" aria-label="字幕字号">
+                <input id="nativePopupOpacity" type="number" min="0.30" max="1.00" step="0.05" value="0.88" aria-label="字幕透明度">
+              </div>
+              <small>左框为字号；右框为整体透明度，范围 0.30～1.00。</small>
+            </div>
+            <div class="field switch-field popup-setting">
+              <label>字幕中显示推理内容</label>
+              <label class="switch">
+                <input id="nativePopupShowReasoning" type="checkbox">
+                <span class="slider"></span>
+              </label>
+              <small>默认关闭。关闭时只显示“正在思考”，不泄露 reasoning 文本。</small>
+            </div>
+            <div class="field popup-setting preview-field">
+              <label>位置预览</label>
+              <button class="secondary" id="previewPopupBtn" type="button">预览流式字幕</button>
+              <small>先保存配置，再用预览确认固定位置和尺寸。</small>
             </div>
           </div>
 
           <div class="notice">
             本地监听端口由 <code>.env</code> 中的 <code>APP_PORT</code> 决定，
-            修改后需要重启；原生弹窗仅在已登录的桌面会话中可用，关闭弹窗功能不会影响 API 或 Web 实时监视器。
+            修改后需要重启；原生字幕浮层仅在已登录的桌面会话中可用，关闭该功能不会影响 API 或 Web 实时监视器。
           </div>
           <pre class="result compact" id="configResult">尚未保存。</pre>
         </div>
@@ -223,6 +275,14 @@
               <label for="testMaxTokens">最大输出 Token</label>
               <input id="testMaxTokens" type="number" min="1" max="32768" value="4096">
             </div>
+            <div class="field switch-field span-two test-stream-setting">
+              <label>使用真实流式响应</label>
+              <label class="switch">
+                <input id="testStream" type="checkbox" checked>
+                <span class="slider"></span>
+              </label>
+              <small>开启后请求使用 <code>stream: true</code>，测试页和原生字幕会随 SSE 片段实时更新。</small>
+            </div>
             <div class="field span-two">
               <label for="testMessage">用户消息</label>
               <textarea id="testMessage" class="message-editor">提示词测试码是什么？只输出测试码。</textarea>
@@ -246,6 +306,6 @@
     </main>
   </div>
 
-  <script src="/ui/app.js"></script>
+  <script src="/ui/app.js?v=3.2.0"></script>
 </body>
 </html>

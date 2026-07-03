@@ -7,5 +7,13 @@
   "request_timeout_seconds": 600,
   "prompt_enabled": true,
   "native_popup_enabled": true,
-  "native_popup_close_seconds": 30
+  "native_popup_close_seconds": 30,
+  "native_popup_position": "bottom_center",
+  "native_popup_offset_x": 3,
+  "native_popup_offset_y": -1247,
+  "native_popup_width": 960,
+  "native_popup_height": 220,
+  "native_popup_font_size": 12,
+  "native_popup_opacity": 0.88,
+  "native_popup_show_reasoning": false
 }
