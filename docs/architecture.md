@@ -8,7 +8,7 @@ app.py
     ├── api/routes          HTTP 与 WebSocket 路由
     ├── proxy              OpenAI/Ollama 转发与流解析
     ├── monitoring         内存历史、事件广播、请求生命周期
-    ├── desktop            原生字幕进程与窗口
+    ├── desktop            原生字幕进程、窗口与 Win32 Alpha 渲染
     ├── prompts            提示词配置与注入
     ├── config             配置校验
     ├── storage            原子 JSON 持久化
@@ -55,3 +55,10 @@ API 主进程  ◀─ saved position  ───  字幕进程
 ## 穿透安全策略
 
 字幕窗口先完成 Tk 首帧显示和子控件绘制，再延迟写入 `WS_EX_TRANSPARENT`。穿透切换不修改 layered/no-activate/tool-window 等基础样式；流式文本更新后主动请求 Win32 重绘。定位模式通过事件队列提前覆盖穿透配置，确保预览窗口从创建开始即可交互。
+
+
+## 字幕每像素 Alpha 渲染
+
+Windows 下 `desktop/layered_renderer.py` 使用 Pillow 生成 RGBA 位图，再通过 `UpdateLayeredWindow` 提交到无边框字幕窗口。背景和文字 Alpha 在位图中分别计算，因此背景可以完全透明，而文字仍保持独立透明度和抗锯齿边缘。
+
+渲染器只负责视觉合成，不参与请求转发、事件排序或配置持久化；失败时 `SubtitleOverlay` 自动回退到普通 Tk 控件，API 链路不受影响。定位模式会给全透明位图增加临时低 Alpha 命中区域，保证拖动操作可用。

@@ -41,6 +41,19 @@ class Runtime:
             # before the Tk window completed its first paint. Reset it once so
             # upgrades always recover a visible, interactive subtitle surface.
             merged_config["native_popup_click_through"] = False
+        if schema_version < 4:
+            # Split the old whole-window opacity into independent channels. Text
+            # starts fully opaque; the old alpha becomes the background alpha.
+            try:
+                legacy_opacity = float(existing_config.get("native_popup_opacity", 0.88))
+            except (TypeError, ValueError):
+                legacy_opacity = 0.88
+            legacy_opacity = max(0.0, min(1.0, legacy_opacity))
+            if bool(existing_config.get("native_popup_transparent_background", False)):
+                legacy_opacity = 0.0
+            merged_config["native_popup_text_opacity"] = 1.0
+            merged_config["native_popup_background_opacity"] = legacy_opacity
+            merged_config["native_popup_transparent_background"] = legacy_opacity <= 0.001
         merged_config["config_schema_version"] = CONFIG_SCHEMA_VERSION
         if merged_config != existing_config:
             config_store.write(merged_config)

@@ -28,6 +28,8 @@ SUBTITLE_CONFIG_KEYS = {
     "native_popup_height",
     "native_popup_font_size",
     "native_popup_opacity",
+    "native_popup_text_opacity",
+    "native_popup_background_opacity",
     "native_popup_show_reasoning",
     "native_popup_click_through",
     "native_popup_transparent_background",

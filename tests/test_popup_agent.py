@@ -211,7 +211,7 @@ def test_runtime_migrates_420_click_through_to_safe_default(tmp_path: Path) -> N
     )
     runtime = Runtime.create(settings)
     config = runtime.config_store.read()
-    assert config["config_schema_version"] == 3
+    assert config["config_schema_version"] == 4
     assert config["native_popup_click_through"] is False
 
 
@@ -219,12 +219,47 @@ def test_popup_config_normalizes_transparent_background_settings() -> None:
     config = popup_window.normalize_popup_config(
         {
             "transparent_background": True,
+            "text_opacity": 0.7,
             "text_shadow": False,
             "shadow_color": "#ABCDEF",
             "shadow_offset": 99,
         }
     )
     assert config["transparent_background"] is True
+    assert config["background_opacity"] == 0.0
+    assert config["text_opacity"] == 0.7
     assert config["text_shadow"] is False
     assert config["shadow_color"] == "#abcdef"
     assert config["shadow_offset"] == 8
+
+
+def test_runtime_migrates_430_opacity_channels(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    settings.config_path.write_text(
+        '{"config_schema_version":3,"default_model":"m",'
+        '"upstream_base_url":"http://127.0.0.1:1/v1",'
+        '"native_popup_opacity":0.66,"native_popup_transparent_background":false}',
+        encoding="utf-8",
+    )
+    runtime = Runtime.create(settings)
+    config = runtime.config_store.read()
+    assert config["config_schema_version"] == 4
+    assert config["native_popup_text_opacity"] == 1.0
+    assert config["native_popup_background_opacity"] == 0.66
+
+
+def test_runtime_migrates_430_transparent_background_to_zero_alpha(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    settings.config_path.write_text(
+        '{"config_schema_version":3,"default_model":"m",'
+        '"upstream_base_url":"http://127.0.0.1:1/v1",'
+        '"native_popup_opacity":0.88,"native_popup_transparent_background":true}',
+        encoding="utf-8",
+    )
+    runtime = Runtime.create(settings)
+    config = runtime.config_store.read()
+    assert config["native_popup_text_opacity"] == 1.0
+    assert config["native_popup_background_opacity"] == 0.0
+    assert config["native_popup_transparent_background"] is True

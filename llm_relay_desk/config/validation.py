@@ -54,6 +54,27 @@ def _bounded_int(
     return value
 
 
+
+
+def _bounded_float(
+    updated: dict[str, Any],
+    key: str,
+    default: float,
+    minimum: float,
+    maximum: float,
+    label: str,
+) -> float:
+    try:
+        value = float(updated.get(key, default))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"{label}必须为数字") from exc
+    if value < minimum or value > maximum:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label}范围为 {minimum:.2f}～{maximum:.2f}",
+        )
+    return round(value, 2)
+
 def _hex_color(updated: dict[str, Any], key: str, default: str, label: str) -> str:
     value = str(updated.get(key, default)).strip().lower()
     if not re.fullmatch(r"#[0-9a-f]{6}", value):
@@ -132,21 +153,53 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
         updated, "native_popup_font_size", 24, 12, 72, "字幕字号"
     )
 
-    try:
-        opacity = float(updated.get("native_popup_opacity", 0.88))
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail="字幕透明度必须为数字") from exc
-    if opacity < 0.30 or opacity > 1.0:
-        raise HTTPException(status_code=400, detail="字幕透明度范围为 0.30～1.00")
-    updated["native_popup_opacity"] = round(opacity, 2)
+    legacy_opacity = _bounded_float(
+        updated,
+        "native_popup_opacity",
+        0.88,
+        0.0,
+        1.0,
+        "旧版字幕透明度",
+    )
+    updated["native_popup_text_opacity"] = _bounded_float(
+        updated,
+        "native_popup_text_opacity",
+        1.0,
+        0.10,
+        1.0,
+        "文字透明度",
+    )
+    if "native_popup_background_opacity" in payload:
+        background_opacity = _bounded_float(
+            updated,
+            "native_popup_background_opacity",
+            legacy_opacity,
+            0.0,
+            1.0,
+            "背景透明度",
+        )
+    elif payload.get("native_popup_transparent_background") is True:
+        background_opacity = 0.0
+    else:
+        background_opacity = _bounded_float(
+            updated,
+            "native_popup_background_opacity",
+            0.0
+            if bool(updated.get("native_popup_transparent_background", False))
+            else legacy_opacity,
+            0.0,
+            1.0,
+            "背景透明度",
+        )
+    updated["native_popup_background_opacity"] = background_opacity
+    # Keep the legacy keys synchronized for older clients.
+    updated["native_popup_opacity"] = background_opacity
+    updated["native_popup_transparent_background"] = background_opacity <= 0.001
     updated["native_popup_show_reasoning"] = bool(
         updated.get("native_popup_show_reasoning", False)
     )
     updated["native_popup_click_through"] = bool(
         updated.get("native_popup_click_through", False)
-    )
-    updated["native_popup_transparent_background"] = bool(
-        updated.get("native_popup_transparent_background", False)
     )
     updated["native_popup_text_shadow"] = bool(
         updated.get("native_popup_text_shadow", True)

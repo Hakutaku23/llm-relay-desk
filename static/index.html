@@ -233,12 +233,12 @@
               <small>左框为宽度，右框为高度。</small>
             </div>
             <div class="field">
-              <label>字幕字号与透明度</label>
+              <label>字幕字号与文字透明度</label>
               <div class="inline-inputs">
                 <input id="nativePopupFontSize" type="number" min="12" max="72" value="24" aria-label="字幕字号">
-                <input id="nativePopupOpacity" type="number" min="0.30" max="1.00" step="0.05" value="0.88" aria-label="字幕透明度">
+                <input id="nativePopupTextOpacity" type="number" min="0.10" max="1.00" step="0.05" value="1.00" aria-label="文字透明度">
               </div>
-              <small>透明度范围为 0.30～1.00。</small>
+              <small>文字透明度范围为 0.10～1.00，不再受背景透明度影响。</small>
             </div>
             <div class="field switch-field">
               <label>字幕中显示推理内容</label>
@@ -248,26 +248,23 @@
               </label>
               <small>默认关闭，只显示“正在思考”，避免暴露 reasoning 文本。</small>
             </div>
-            <div class="field switch-field">
-              <label>无背景填充</label>
-              <label class="switch">
-                <input id="nativePopupTransparentBackground" type="checkbox">
-                <span class="slider"></span>
-              </label>
-              <small>Windows 下使用颜色键透明，仅保留字幕文字；定位模式和鼠标穿透仍可正常使用。</small>
+            <div class="field">
+              <label for="nativePopupBackgroundOpacity">背景透明度</label>
+              <input id="nativePopupBackgroundOpacity" type="number" min="0.00" max="1.00" step="0.05" value="0.88">
+              <small>范围为 0.00～1.00；设置为 0 即完全无背景，只显示抗锯齿字幕。</small>
             </div>
             <div class="field switch-field">
-              <label>透明模式文字阴影</label>
+              <label>文字柔化阴影</label>
               <label class="switch">
                 <input id="nativePopupTextShadow" type="checkbox" checked>
                 <span class="slider"></span>
               </label>
-              <small>建议开启，避免白色或高亮画面导致字幕难以辨认。</small>
+              <small>使用柔化阴影与轻微描边，避免透明背景下出现硬边、重影或锯齿。</small>
             </div>
             <div class="field">
               <label>阴影偏移（像素）</label>
               <input id="nativePopupShadowOffset" type="number" min="1" max="8" value="2">
-              <small>仅在“无背景填充”和文字阴影同时开启时生效。</small>
+              <small>阴影开启时生效；透明背景建议使用 1～3 像素。</small>
             </div>
           </div>
         </div>

@@ -74,7 +74,8 @@ async function loadHealth() {
     } else if (health.native_popup_worker_alive) {
       $("nativePopupStatus").textContent = "字幕浮层运行中";
       const interaction = health.native_popup_click_through ? "鼠标穿透" : "可交互";
-      const appearance = health.native_popup_transparent_background ? "透明背景" : "背景填充";
+      const backgroundOpacity = Number(health.native_popup_background_opacity ?? 0.88);
+      const appearance = backgroundOpacity <= 0 ? "无背景" : `背景 ${Math.round(backgroundOpacity * 100)}%`;
       $("nativePopupDetail").textContent = `${interaction} · ${appearance} · ${health.native_popup_position || "bottom_center"} · 完成后 ${health.native_popup_close_seconds} 秒关闭`;
     } else {
       $("nativePopupStatus").textContent = "桌面窗口不可用";
@@ -133,25 +134,42 @@ async function saveConfig() {
   }
 }
 
+function hexToRgba(hex, opacity) {
+  const value = String(hex || "#000000").replace("#", "");
+  const parsed = Number.parseInt(value, 16);
+  const red = (parsed >> 16) & 255;
+  const green = (parsed >> 8) & 255;
+  const blue = parsed & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${Math.max(0, Math.min(1, opacity))})`;
+}
+
 function updateSubtitleColorPreview() {
   const preview = $("subtitleColorPreview");
   if (!preview) return;
-  const transparent = $("nativePopupTransparentBackground").checked;
-  const shadowEnabled = transparent && $("nativePopupTextShadow").checked;
+  const textOpacity = Number($("nativePopupTextOpacity").value) || 1;
+  const backgroundOpacity = Math.max(0, Number($("nativePopupBackgroundOpacity").value) || 0);
+  const transparent = backgroundOpacity <= 0.001;
+  const shadowEnabled = $("nativePopupTextShadow").checked;
   const shadowOffset = Number($("nativePopupShadowOffset").value) || 2;
+  const shadowColor = hexToRgba($("nativePopupShadowColor").value, Math.min(0.82, textOpacity));
   const shadow = shadowEnabled
-    ? `${shadowOffset}px ${shadowOffset}px 0 ${$("nativePopupShadowColor").value}`
+    ? `${shadowOffset}px ${shadowOffset}px ${Math.max(2, shadowOffset * 1.5)}px ${shadowColor}, 0 0 1px ${shadowColor}`
     : "none";
 
   preview.classList.toggle("transparent-mode", transparent);
-  preview.style.backgroundColor = transparent
-    ? "transparent"
-    : $("nativePopupBackgroundColor").value;
-  preview.style.color = $("nativePopupTextColor").value;
-  preview.style.borderColor = transparent
-    ? "transparent"
-    : $("nativePopupBorderColor").value;
-  preview.querySelector("small").style.color = $("nativePopupMutedColor").value;
+  preview.style.backgroundColor = hexToRgba(
+    $("nativePopupBackgroundColor").value,
+    backgroundOpacity
+  );
+  preview.style.color = hexToRgba($("nativePopupTextColor").value, textOpacity);
+  preview.style.borderColor = hexToRgba(
+    $("nativePopupBorderColor").value,
+    transparent ? 0 : Math.min(1, backgroundOpacity + 0.18)
+  );
+  preview.querySelector("small").style.color = hexToRgba(
+    $("nativePopupMutedColor").value,
+    Math.min(1, textOpacity * 0.82)
+  );
   preview.querySelector("small").style.textShadow = shadow;
   preview.querySelector("strong").style.textShadow = shadow;
 }
@@ -169,10 +187,11 @@ async function loadSubtitleConfig() {
   $("nativePopupWidth").value = config.native_popup_width || 960;
   $("nativePopupHeight").value = config.native_popup_height || 220;
   $("nativePopupFontSize").value = config.native_popup_font_size || 24;
-  $("nativePopupOpacity").value = config.native_popup_opacity ?? 0.88;
+  $("nativePopupTextOpacity").value = config.native_popup_text_opacity ?? 1.0;
+  $("nativePopupBackgroundOpacity").value = config.native_popup_background_opacity
+    ?? (config.native_popup_transparent_background ? 0 : config.native_popup_opacity ?? 0.88);
   $("nativePopupShowReasoning").checked = Boolean(config.native_popup_show_reasoning);
   $("nativePopupClickThrough").checked = config.native_popup_click_through === true;
-  $("nativePopupTransparentBackground").checked = config.native_popup_transparent_background === true;
   $("nativePopupTextShadow").checked = config.native_popup_text_shadow !== false;
   $("nativePopupShadowOffset").value = config.native_popup_shadow_offset || 2;
   $("nativePopupBackgroundColor").value = config.native_popup_background_color || "#101318";
@@ -196,10 +215,10 @@ function subtitlePayload() {
     native_popup_width: Number($("nativePopupWidth").value),
     native_popup_height: Number($("nativePopupHeight").value),
     native_popup_font_size: Number($("nativePopupFontSize").value),
-    native_popup_opacity: Number($("nativePopupOpacity").value),
+    native_popup_text_opacity: Number($("nativePopupTextOpacity").value),
+    native_popup_background_opacity: Number($("nativePopupBackgroundOpacity").value),
     native_popup_show_reasoning: $("nativePopupShowReasoning").checked,
     native_popup_click_through: $("nativePopupClickThrough").checked,
-    native_popup_transparent_background: $("nativePopupTransparentBackground").checked,
     native_popup_text_shadow: $("nativePopupTextShadow").checked,
     native_popup_shadow_offset: Number($("nativePopupShadowOffset").value),
     native_popup_background_color: $("nativePopupBackgroundColor").value,
@@ -708,7 +727,8 @@ $("promptFileInput").addEventListener("change", (event) => {
   "nativePopupErrorColor",
   "nativePopupShadowColor",
   "nativePopupShadowOffset",
-  "nativePopupTransparentBackground",
+  "nativePopupTextOpacity",
+  "nativePopupBackgroundOpacity",
   "nativePopupTextShadow",
 ].forEach((id) => $(id).addEventListener("input", updateSubtitleColorPreview));
 $("sendTestBtn").addEventListener("click", sendTest);
