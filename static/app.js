@@ -66,6 +66,16 @@ async function loadHealth() {
     $("upstreamValue").textContent = health.upstream;
     $("activePromptValue").textContent = health.active_prompt || "未启用";
     $("promptLengthValue").textContent = `${health.active_prompt_length} 字符`;
+    if (!health.native_popup_enabled) {
+      $("nativePopupStatus").textContent = "已关闭";
+      $("nativePopupDetail").textContent = "可在转发配置中开启";
+    } else if (health.native_popup_worker_alive) {
+      $("nativePopupStatus").textContent = "运行中";
+      $("nativePopupDetail").textContent = `完成后 ${health.native_popup_close_seconds} 秒关闭`;
+    } else {
+      $("nativePopupStatus").textContent = "桌面窗口不可用";
+      $("nativePopupDetail").textContent = "请检查 tkinter 或桌面会话";
+    }
     $("recommendedBaseUrl").textContent = health.openai_base_url;
     $("recommendedModel").textContent = health.model;
     $("sidebarDot").className = "status-dot ok";
@@ -86,6 +96,8 @@ async function loadConfig() {
   $("defaultModel").value = state.config.default_model || "";
   $("requestTimeout").value = state.config.request_timeout_seconds || 600;
   $("promptEnabled").checked = Boolean(state.config.prompt_enabled);
+  $("nativePopupEnabled").checked = state.config.native_popup_enabled !== false;
+  $("nativePopupCloseSeconds").value = state.config.native_popup_close_seconds || 30;
   $("recommendedApiKey").textContent = state.config.local_api_key || "无需密钥";
   $("recommendedModel").textContent = state.config.default_model || "--";
   $("testModel").value = state.config.default_model || "";
@@ -99,6 +111,8 @@ async function saveConfig() {
     default_model: $("defaultModel").value.trim(),
     request_timeout_seconds: Number($("requestTimeout").value),
     prompt_enabled: $("promptEnabled").checked,
+    native_popup_enabled: $("nativePopupEnabled").checked,
+    native_popup_close_seconds: Number($("nativePopupCloseSeconds").value),
   };
 
   $("saveConfigBtn").disabled = true;
@@ -275,7 +289,7 @@ async function sendTest() {
       },
     ],
     stream: false,
-    max_tokens: Number($("testMaxTokens").value) || 512,
+    max_tokens: Number($("testMaxTokens").value) || 4096,
   };
 
   $("sendTestBtn").disabled = true;

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import multiprocessing
 import os
+import queue
 import re
 import threading
 import time
@@ -40,6 +42,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "default_reasoning_effort": "",
     "request_timeout_seconds": 600,
     "prompt_enabled": True,
+    "native_popup_enabled": True,
+    "native_popup_close_seconds": 30,
 }
 
 DEFAULT_PROMPTS: dict[str, Any] = {
@@ -97,6 +101,137 @@ class JsonStore:
         with self.lock:
             atomic_write_json(self.path, value)
             return value
+
+
+class NativePopupController:
+    """Best-effort bridge from the API process to native Tk popup windows.
+
+    The desktop worker is a separate process. Queue overflow, a missing desktop
+    session, or a popup crash never blocks or interrupts API forwarding.
+    """
+
+    def __init__(self, *, queue_size: int = 4096) -> None:
+        self.queue_size = queue_size
+        self.enabled = False
+        self.close_seconds = 30
+        self.event_queue: Any = None
+        self.process: multiprocessing.Process | None = None
+        self.lock = threading.RLock()
+        self.last_start_attempt = 0.0
+
+    def configure(self, config: dict[str, Any]) -> None:
+        enabled = bool(config.get("native_popup_enabled", True))
+        try:
+            close_seconds = int(config.get("native_popup_close_seconds", 30))
+        except (TypeError, ValueError):
+            close_seconds = 30
+        close_seconds = max(1, min(3600, close_seconds))
+
+        with self.lock:
+            self.enabled = enabled
+            self.close_seconds = close_seconds
+            if enabled:
+                self._ensure_process_locked()
+            if self.event_queue is not None:
+                self._put_locked(
+                    {
+                        "type": "popup_config",
+                        "enabled": enabled,
+                        "close_seconds": close_seconds,
+                    }
+                )
+
+    def publish(self, event: dict[str, Any]) -> None:
+        if not self.enabled:
+            return
+        with self.lock:
+            self._ensure_process_locked()
+            if self.event_queue is None:
+                return
+            self._put_locked(dict(event))
+
+    def is_alive(self) -> bool:
+        with self.lock:
+            return bool(self.process and self.process.is_alive())
+
+    def stop(self) -> None:
+        with self.lock:
+            if self.event_queue is not None:
+                self._put_locked({"type": "popup_shutdown"})
+            process = self.process
+        if process and process.is_alive():
+            process.join(timeout=1.5)
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=1.0)
+        with self.lock:
+            self._dispose_locked()
+
+    def _ensure_process_locked(self) -> None:
+        if self.process and self.process.is_alive():
+            return
+
+        now = time.monotonic()
+        if now - self.last_start_attempt < 5.0:
+            return
+        self.last_start_attempt = now
+        self._dispose_locked()
+
+        try:
+            from popup_window import run_popup_worker
+
+            context = multiprocessing.get_context("spawn")
+            event_queue = context.Queue(maxsize=self.queue_size)
+            process = context.Process(
+                target=run_popup_worker,
+                args=(event_queue,),
+                name="llm-relay-native-popup",
+                daemon=True,
+            )
+            process.start()
+            self.event_queue = event_queue
+            self.process = process
+            self._put_locked(
+                {
+                    "type": "popup_config",
+                    "enabled": self.enabled,
+                    "close_seconds": self.close_seconds,
+                }
+            )
+        except Exception as exc:
+            print(f"[native-popup] 启动失败：{exc}", flush=True)
+            self._dispose_locked()
+
+    def _put_locked(self, event: dict[str, Any]) -> None:
+        if self.event_queue is None:
+            return
+        try:
+            self.event_queue.put_nowait(event)
+        except queue.Full:
+            # Native UI is observational only; never add back-pressure.
+            pass
+        except (BrokenPipeError, EOFError, OSError):
+            self._dispose_locked()
+
+    def _dispose_locked(self) -> None:
+        event_queue = self.event_queue
+        process = self.process
+        self.event_queue = None
+        self.process = None
+        if process is not None and not process.is_alive():
+            try:
+                process.join(timeout=0.2)
+            except (AssertionError, OSError, ValueError):
+                pass
+        if event_queue is not None:
+            try:
+                event_queue.close()
+            except (AttributeError, OSError, ValueError):
+                pass
+            try:
+                event_queue.join_thread()
+            except (AttributeError, OSError, ValueError):
+                pass
 
 
 class MonitorHub:
@@ -202,6 +337,7 @@ class MonitorHub:
 
     def publish(self, event: dict[str, Any]) -> None:
         self._update_record(event)
+        native_popup_controller.publish(event)
         if not self.subscribers:
             return
 
@@ -230,6 +366,11 @@ class MonitorHub:
 
 config_store = JsonStore(CONFIG_PATH, DEFAULT_CONFIG)
 prompt_store = JsonStore(PROMPTS_PATH, DEFAULT_PROMPTS)
+existing_config = config_store.read()
+if any(key not in existing_config for key in DEFAULT_CONFIG):
+    config_store.write({**DEFAULT_CONFIG, **existing_config})
+
+native_popup_controller = NativePopupController()
 monitor_hub = MonitorHub()
 
 
@@ -274,6 +415,15 @@ def validate_config(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="超时时间范围为 30～7200 秒")
     updated["request_timeout_seconds"] = timeout
     updated["prompt_enabled"] = bool(updated.get("prompt_enabled", True))
+    updated["native_popup_enabled"] = bool(updated.get("native_popup_enabled", True))
+
+    try:
+        popup_close_seconds = int(updated.get("native_popup_close_seconds", 30))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="弹窗自动关闭时间必须为整数") from exc
+    if popup_close_seconds < 1 or popup_close_seconds > 3600:
+        raise HTTPException(status_code=400, detail="弹窗自动关闭时间范围为 1～3600 秒")
+    updated["native_popup_close_seconds"] = popup_close_seconds
 
     if not updated["default_model"]:
         raise HTTPException(status_code=400, detail="默认模型不能为空")
@@ -734,8 +884,8 @@ async def forward_native_request(
 
 app = FastAPI(
     title="LLM Relay Desk",
-    version="3.0.0",
-    description="本地 LLM API 转发、提示词管理与独立实时响应监视器",
+    version="3.1.0",
+    description="本地 LLM API 转发、提示词管理、Web 监视器与原生响应弹窗",
 )
 
 app.add_middleware(
@@ -745,6 +895,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_native_popup() -> None:
+    native_popup_controller.configure(config_store.read())
+
+
+@app.on_event("shutdown")
+async def shutdown_native_popup() -> None:
+    native_popup_controller.stop()
 
 
 @app.get("/")
@@ -770,6 +930,9 @@ async def health() -> dict[str, Any]:
         "active_prompt_length": len(prompt),
         "monitor_history_count": len(monitor_hub.records),
         "monitor_clients": len(monitor_hub.subscribers),
+        "native_popup_enabled": config.get("native_popup_enabled", True),
+        "native_popup_close_seconds": config.get("native_popup_close_seconds", 30),
+        "native_popup_worker_alive": native_popup_controller.is_alive(),
     }
 
 
@@ -806,6 +969,7 @@ async def admin_get_config() -> dict[str, Any]:
 async def admin_put_config(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     updated = validate_config(payload)
     config_store.write(updated)
+    native_popup_controller.configure(updated)
     return {"ok": True, "config": updated}
 
 
@@ -1111,6 +1275,7 @@ app.mount("/ui", StaticFiles(directory=STATIC_DIR, html=True), name="ui")
 if __name__ == "__main__":
     import uvicorn
 
+    multiprocessing.freeze_support()
     uvicorn.run(
         "app:app",
         host=APP_HOST,

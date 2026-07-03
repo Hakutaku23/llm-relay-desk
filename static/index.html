@@ -41,7 +41,7 @@
       </header>
 
       <section class="tab-panel active" id="tab-status">
-        <div class="cards three">
+        <div class="cards four">
           <article class="metric-card">
             <span>本地 OpenAI API</span>
             <strong id="localApiValue">--</strong>
@@ -56,6 +56,11 @@
             <span>当前提示词</span>
             <strong id="activePromptValue">--</strong>
             <small id="promptLengthValue">--</small>
+          </article>
+          <article class="metric-card">
+            <span>原生响应弹窗</span>
+            <strong id="nativePopupStatus">--</strong>
+            <small id="nativePopupDetail">--</small>
           </article>
         </div>
 
@@ -137,11 +142,24 @@
                 <span class="slider"></span>
               </label>
             </div>
+            <div class="field switch-field popup-setting">
+              <label>原生响应弹窗</label>
+              <label class="switch">
+                <input id="nativePopupEnabled" type="checkbox">
+                <span class="slider"></span>
+              </label>
+              <small>收到聊天响应时显示独立桌面窗口，不打开浏览器页面。</small>
+            </div>
+            <div class="field popup-setting">
+              <label for="nativePopupCloseSeconds">响应完成后自动关闭（秒）</label>
+              <input id="nativePopupCloseSeconds" type="number" min="1" max="3600" value="30">
+              <small>从完整响应接收完成后开始倒计时，范围 1～3600 秒。</small>
+            </div>
           </div>
 
           <div class="notice">
             本地监听端口由 <code>.env</code> 中的 <code>APP_PORT</code> 决定，
-            修改后需要重启；上游转发端口可在此页面实时修改。
+            修改后需要重启；原生弹窗仅在已登录的桌面会话中可用，关闭弹窗功能不会影响 API 或 Web 实时监视器。
           </div>
           <pre class="result compact" id="configResult">尚未保存。</pre>
         </div>
@@ -203,7 +221,7 @@
             </div>
             <div class="field">
               <label for="testMaxTokens">最大输出 Token</label>
-              <input id="testMaxTokens" type="number" min="1" max="32768" value="512">
+              <input id="testMaxTokens" type="number" min="1" max="32768" value="4096">
             </div>
             <div class="field span-two">
               <label for="testMessage">用户消息</label>

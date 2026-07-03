@@ -131,6 +131,7 @@ nav { display: grid; gap: 8px; }
 }
 
 .cards.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cards.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 .metric-card, .panel {
   background: var(--panel);
@@ -232,6 +233,10 @@ input:focus, select:focus, textarea:focus {
 textarea { resize: vertical; }
 
 .switch-field { align-content: start; }
+.popup-setting {
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
 .switch {
   width: 48px;
   height: 27px;
@@ -358,6 +363,7 @@ textarea { resize: vertical; }
 
 @media (max-width: 980px) {
   .shell { grid-template-columns: 1fr; }
+  .cards.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sidebar { position: static; height: auto; }
   nav { grid-template-columns: repeat(4, 1fr); }
   .nav-item { text-align: center; padding: 10px 6px; }
