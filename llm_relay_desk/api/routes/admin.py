@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
 import time
 import uuid
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Body, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from llm_relay_desk.api.dependencies import runtime_from_request
 from llm_relay_desk.config import validate_config
+from llm_relay_desk.desktop.controller import build_popup_config
 from llm_relay_desk.desktop.fonts import font_catalog_payload
+from llm_relay_desk.desktop.layered_renderer import compose_subtitle_image
 from llm_relay_desk.monitoring import utc_now_iso
 from llm_relay_desk.proxy.common import timeout_config, upstream_headers
 
@@ -39,6 +42,9 @@ SUBTITLE_CONFIG_KEYS = {
     "native_popup_text_shadow",
     "native_popup_shadow_color",
     "native_popup_shadow_offset",
+    "native_popup_text_outline",
+    "native_popup_outline_color",
+    "native_popup_outline_width",
     "native_popup_background_color",
     "native_popup_text_color",
     "native_popup_muted_color",
@@ -85,6 +91,41 @@ async def get_subtitle_fonts() -> dict[str, object]:
     """Return locally installed font families available to the desktop renderer."""
 
     return await asyncio.to_thread(font_catalog_payload)
+
+
+@router.post("/subtitle-preview.png")
+async def render_subtitle_preview(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> Response:
+    """Render the WebUI preview with the same Pillow compositor as desktop."""
+
+    runtime = runtime_from_request(request)
+    filtered = {
+        key: value
+        for key, value in payload.items()
+        if key in SUBTITLE_CONFIG_KEYS
+    }
+    validated = validate_config(runtime.config_store, filtered)
+    popup_config = build_popup_config(validated, include_type=False)
+    image = await asyncio.to_thread(
+        compose_subtitle_image,
+        width=int(popup_config["width"]),
+        height=int(popup_config["height"]),
+        status="字幕预览 · 正在生成",
+        body="这是一段字幕颜色预览文本。",
+        body_kind=None,
+        positioning=False,
+        show_close=False,
+        config=popup_config,
+    )
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return Response(
+        content=output.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.put("/subtitle-config")

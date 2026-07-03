@@ -29,7 +29,7 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
     with TestClient(app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "4.5.0"
+        assert health.json()["version"] == "4.5.1"
         ui = client.get("/ui/")
         assert ui.status_code == 200
         assert "data-tab=\"subtitle\"" in ui.text
@@ -40,6 +40,10 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
         assert "nativePopupTextShadow" in ui.text
         assert "nativePopupFontFamily" in ui.text
         assert "nativePopupTextAlign" in ui.text
+        assert "nativePopupTextOutline" in ui.text
+        assert "nativePopupOutlineColor" in ui.text
+        assert "nativePopupOutlineWidth" in ui.text
+        assert "subtitleRenderedPreview" in ui.text
         config_section = ui.text.split('id="tab-config"', 1)[1].split('id="tab-subtitle"', 1)[0]
         assert "nativePopupEnabled" not in config_section
         assert client.get("/monitor/").status_code == 200
@@ -63,6 +67,7 @@ def test_route_contract_is_preserved(tmp_path: Path) -> None:
         ("/admin/subtitle-config", "GET"),
         ("/admin/subtitle-config", "PUT"),
         ("/admin/subtitle-fonts", "GET"),
+        ("/admin/subtitle-preview.png", "POST"),
         ("/admin/subtitle-positioning/start", "POST"),
         ("/admin/subtitle-positioning/finish", "POST"),
         ("/admin/prompts", "GET"),
@@ -98,6 +103,9 @@ def test_subtitle_config_endpoint(tmp_path: Path) -> None:
                 "native_popup_text_shadow": True,
                 "native_popup_shadow_color": "#010101",
                 "native_popup_shadow_offset": 3,
+                "native_popup_text_outline": True,
+                "native_popup_outline_color": "#020202",
+                "native_popup_outline_width": 2,
             },
         )
         assert response.status_code == 200
@@ -116,4 +124,33 @@ def test_subtitle_config_endpoint(tmp_path: Path) -> None:
         assert subtitle["native_popup_text_shadow"] is True
         assert subtitle["native_popup_shadow_color"] == "#010101"
         assert subtitle["native_popup_shadow_offset"] == 3
+        assert subtitle["native_popup_text_outline"] is True
+        assert subtitle["native_popup_outline_color"] == "#020202"
+        assert subtitle["native_popup_outline_width"] == 2
         assert "upstream_api_key" not in subtitle
+
+
+def test_high_fidelity_subtitle_preview_uses_png_renderer(tmp_path: Path) -> None:
+    app = create_app(make_settings(tmp_path))
+    config = app.state.runtime.config_store.read()
+    config["native_popup_enabled"] = False
+    app.state.runtime.config_store.write(config)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/admin/subtitle-preview.png",
+            json={
+                "native_popup_width": 640,
+                "native_popup_height": 160,
+                "native_popup_background_opacity": 0.0,
+                "native_popup_text_color": "#ff0000",
+                "native_popup_text_shadow": False,
+                "native_popup_text_outline": False,
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("image/png")
+        assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+        # Rendering a preview must not persist unsaved form settings.
+        stored = client.get("/admin/subtitle-config").json()
+        assert stored["native_popup_text_color"] != "#ff0000"

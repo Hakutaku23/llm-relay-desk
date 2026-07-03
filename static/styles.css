@@ -453,6 +453,36 @@ textarea { resize: vertical; }
   border-style: dashed;
 }
 
+.subtitle-preview > img {
+  display: none;
+  width: 100%;
+  height: auto;
+  max-height: 260px;
+  object-fit: contain;
+  object-position: center;
+}
+
+.subtitle-preview.rendered-ready {
+  display: block;
+  padding: 0;
+  border-color: transparent;
+}
+
+.subtitle-preview.rendered-ready > img {
+  display: block;
+}
+
+.subtitle-preview.rendered-ready > small,
+.subtitle-preview.rendered-ready > strong {
+  display: none;
+}
+
+.preview-hint {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
 .subtitle-preview small {
   color: #aeb6c2;
   font-size: 12px;

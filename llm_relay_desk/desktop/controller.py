@@ -8,6 +8,66 @@ from collections.abc import Callable
 from typing import Any
 
 
+def build_popup_config(
+    config: dict[str, Any],
+    *,
+    include_type: bool = True,
+) -> dict[str, Any]:
+    """Translate persisted application settings into desktop-renderer settings."""
+
+    enabled = bool(config.get("native_popup_enabled", True))
+    try:
+        close_seconds = int(config.get("native_popup_close_seconds", 30))
+    except (TypeError, ValueError):
+        close_seconds = 30
+    close_seconds = max(1, min(3600, close_seconds))
+    popup_config: dict[str, Any] = {
+        "enabled": enabled,
+        "close_seconds": close_seconds,
+        "position": str(config.get("native_popup_position", "bottom_center")),
+        "offset_x": int(config.get("native_popup_offset_x", 0)),
+        "offset_y": int(config.get("native_popup_offset_y", 0)),
+        "custom_x": int(config.get("native_popup_custom_x", 120)),
+        "custom_y": int(config.get("native_popup_custom_y", 120)),
+        "width": int(config.get("native_popup_width", 960)),
+        "height": int(config.get("native_popup_height", 220)),
+        "font_size": int(config.get("native_popup_font_size", 24)),
+        "font_family": str(config.get("native_popup_font_family", "Microsoft YaHei UI")),
+        "text_align": str(config.get("native_popup_text_align", "left")),
+        "opacity": float(config.get("native_popup_opacity", 0.88)),
+        "text_opacity": float(config.get("native_popup_text_opacity", 1.0)),
+        "background_opacity": float(
+            config.get(
+                "native_popup_background_opacity",
+                0.0
+                if config.get("native_popup_transparent_background", False)
+                else config.get("native_popup_opacity", 0.88),
+            )
+        ),
+        "show_reasoning": bool(config.get("native_popup_show_reasoning", False)),
+        "click_through": bool(config.get("native_popup_click_through", False)),
+        "transparent_background": bool(
+            config.get("native_popup_transparent_background", False)
+        ),
+        "text_shadow": bool(config.get("native_popup_text_shadow", True)),
+        "shadow_color": str(config.get("native_popup_shadow_color", "#000000")),
+        "shadow_offset": int(config.get("native_popup_shadow_offset", 2)),
+        "text_outline": bool(config.get("native_popup_text_outline", False)),
+        "outline_color": str(config.get("native_popup_outline_color", "#000000")),
+        "outline_width": int(config.get("native_popup_outline_width", 0)),
+        "background_color": str(
+            config.get("native_popup_background_color", "#101318")
+        ),
+        "text_color": str(config.get("native_popup_text_color", "#f7f8fa")),
+        "muted_color": str(config.get("native_popup_muted_color", "#aeb6c2")),
+        "border_color": str(config.get("native_popup_border_color", "#343a46")),
+        "error_color": str(config.get("native_popup_error_color", "#ff8f9b")),
+    }
+    if include_type:
+        popup_config["type"] = "popup_config"
+    return popup_config
+
+
 class NativePopupController:
     """Best-effort bridge from the API process to the desktop subtitle worker."""
 
@@ -31,53 +91,9 @@ class NativePopupController:
         self.last_start_attempt = 0.0
 
     def configure(self, config: dict[str, Any]) -> None:
-        enabled = bool(config.get("native_popup_enabled", True))
-        try:
-            close_seconds = int(config.get("native_popup_close_seconds", 30))
-        except (TypeError, ValueError):
-            close_seconds = 30
-        close_seconds = max(1, min(3600, close_seconds))
-
-        popup_config = {
-            "type": "popup_config",
-            "enabled": enabled,
-            "close_seconds": close_seconds,
-            "position": str(config.get("native_popup_position", "bottom_center")),
-            "offset_x": int(config.get("native_popup_offset_x", 0)),
-            "offset_y": int(config.get("native_popup_offset_y", 0)),
-            "custom_x": int(config.get("native_popup_custom_x", 120)),
-            "custom_y": int(config.get("native_popup_custom_y", 120)),
-            "width": int(config.get("native_popup_width", 960)),
-            "height": int(config.get("native_popup_height", 220)),
-            "font_size": int(config.get("native_popup_font_size", 24)),
-            "font_family": str(config.get("native_popup_font_family", "Microsoft YaHei UI")),
-            "text_align": str(config.get("native_popup_text_align", "left")),
-            "opacity": float(config.get("native_popup_opacity", 0.88)),
-            "text_opacity": float(config.get("native_popup_text_opacity", 1.0)),
-            "background_opacity": float(
-                config.get(
-                    "native_popup_background_opacity",
-                    0.0
-                    if config.get("native_popup_transparent_background", False)
-                    else config.get("native_popup_opacity", 0.88),
-                )
-            ),
-            "show_reasoning": bool(config.get("native_popup_show_reasoning", False)),
-            "click_through": bool(config.get("native_popup_click_through", False)),
-            "transparent_background": bool(
-                config.get("native_popup_transparent_background", False)
-            ),
-            "text_shadow": bool(config.get("native_popup_text_shadow", True)),
-            "shadow_color": str(config.get("native_popup_shadow_color", "#000000")),
-            "shadow_offset": int(config.get("native_popup_shadow_offset", 2)),
-            "background_color": str(
-                config.get("native_popup_background_color", "#101318")
-            ),
-            "text_color": str(config.get("native_popup_text_color", "#f7f8fa")),
-            "muted_color": str(config.get("native_popup_muted_color", "#aeb6c2")),
-            "border_color": str(config.get("native_popup_border_color", "#343a46")),
-            "error_color": str(config.get("native_popup_error_color", "#ff8f9b")),
-        }
+        popup_config = build_popup_config(config)
+        enabled = bool(popup_config["enabled"])
+        close_seconds = int(popup_config["close_seconds"])
 
         with self.lock:
             self.enabled = enabled

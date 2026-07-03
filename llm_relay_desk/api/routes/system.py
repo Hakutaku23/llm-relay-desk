@@ -53,6 +53,8 @@ async def health(request: Request) -> dict[str, Any]:
             "native_popup_click_through", False
         ),
         "native_popup_text_opacity": config.get("native_popup_text_opacity", 1.0),
+        "native_popup_text_outline": config.get("native_popup_text_outline", False),
+        "native_popup_outline_width": config.get("native_popup_outline_width", 0),
         "native_popup_background_opacity": config.get(
             "native_popup_background_opacity",
             0.0 if config.get("native_popup_transparent_background", False) else 0.88,

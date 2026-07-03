@@ -5,6 +5,10 @@ const state = {
   prompts: null,
 };
 
+let subtitlePreviewTimer = null;
+let subtitlePreviewObjectUrl = null;
+let subtitlePreviewSequence = 0;
+
 const tabMeta = {
   status: ["服务状态", "检查本地代理、上游服务和实时监视器。"],
   config: ["转发配置", "配置上游端口、模型、密钥和推理参数。"],
@@ -144,7 +148,7 @@ function hexToRgba(hex, opacity) {
   return `rgba(${red}, ${green}, ${blue}, ${Math.max(0, Math.min(1, opacity))})`;
 }
 
-function updateSubtitleColorPreview() {
+function applyCssSubtitlePreviewFallback() {
   const preview = $("subtitleColorPreview");
   if (!preview) return;
   const textOpacity = Number($("nativePopupTextOpacity").value) || 1;
@@ -156,9 +160,13 @@ function updateSubtitleColorPreview() {
   const shadowOffset = Number($("nativePopupShadowOffset").value) || 2;
   const shadowColor = hexToRgba($("nativePopupShadowColor").value, Math.min(0.82, textOpacity));
   const shadow = shadowEnabled
-    ? `${shadowOffset}px ${shadowOffset}px ${Math.max(2, shadowOffset * 1.5)}px ${shadowColor}, 0 0 1px ${shadowColor}`
+    ? `${shadowOffset}px ${shadowOffset}px ${Math.max(2, shadowOffset * 1.5)}px ${shadowColor}`
     : "none";
+  const outlineEnabled = $("nativePopupTextOutline").checked;
+  const outlineWidth = Math.max(0, Number($("nativePopupOutlineWidth").value) || 0);
+  const outlineColor = $("nativePopupOutlineColor").value;
 
+  preview.classList.remove("rendered-ready");
   preview.classList.toggle("transparent-mode", transparent);
   preview.style.fontFamily = `"${fontFamily.replaceAll('"', '')}", "Microsoft YaHei UI", sans-serif`;
   preview.style.textAlign = textAlign;
@@ -171,12 +179,58 @@ function updateSubtitleColorPreview() {
     $("nativePopupBorderColor").value,
     transparent ? 0 : Math.min(1, backgroundOpacity + 0.18)
   );
-  preview.querySelector("small").style.color = hexToRgba(
+  const muted = preview.querySelector("small");
+  const body = preview.querySelector("strong");
+  muted.style.color = hexToRgba(
     $("nativePopupMutedColor").value,
     Math.min(1, textOpacity * 0.82)
   );
-  preview.querySelector("small").style.textShadow = shadow;
-  preview.querySelector("strong").style.textShadow = shadow;
+  for (const element of [muted, body]) {
+    element.style.textShadow = shadow;
+    element.style.webkitTextStroke = outlineEnabled && outlineWidth > 0
+      ? `${outlineWidth}px ${outlineColor}`
+      : "0 transparent";
+    element.style.paintOrder = "stroke fill";
+  }
+}
+
+async function refreshHighFidelitySubtitlePreview(sequence) {
+  try {
+    const response = await fetch("/admin/subtitle-preview.png", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subtitlePayload()),
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`preview ${response.status}`);
+    const blob = await response.blob();
+    if (sequence !== subtitlePreviewSequence) return;
+    const nextUrl = URL.createObjectURL(blob);
+    const image = $("subtitleRenderedPreview");
+    image.onload = () => {
+      if (sequence !== subtitlePreviewSequence) {
+        URL.revokeObjectURL(nextUrl);
+        return;
+      }
+      if (subtitlePreviewObjectUrl) URL.revokeObjectURL(subtitlePreviewObjectUrl);
+      subtitlePreviewObjectUrl = nextUrl;
+      $("subtitleColorPreview").classList.add("rendered-ready");
+    };
+    image.onerror = () => URL.revokeObjectURL(nextUrl);
+    image.src = nextUrl;
+  } catch {
+    // Keep the immediate CSS fallback if the backend preview is temporarily unavailable.
+  }
+}
+
+function updateSubtitleColorPreview() {
+  applyCssSubtitlePreviewFallback();
+  clearTimeout(subtitlePreviewTimer);
+  const sequence = ++subtitlePreviewSequence;
+  subtitlePreviewTimer = setTimeout(
+    () => refreshHighFidelitySubtitlePreview(sequence),
+    140
+  );
 }
 
 async function loadSubtitleFonts() {
@@ -217,12 +271,15 @@ async function loadSubtitleConfig() {
   $("nativePopupClickThrough").checked = config.native_popup_click_through === true;
   $("nativePopupTextShadow").checked = config.native_popup_text_shadow !== false;
   $("nativePopupShadowOffset").value = config.native_popup_shadow_offset || 2;
+  $("nativePopupTextOutline").checked = config.native_popup_text_outline === true;
+  $("nativePopupOutlineWidth").value = config.native_popup_outline_width ?? 0;
   $("nativePopupBackgroundColor").value = config.native_popup_background_color || "#101318";
   $("nativePopupTextColor").value = config.native_popup_text_color || "#f7f8fa";
   $("nativePopupMutedColor").value = config.native_popup_muted_color || "#aeb6c2";
   $("nativePopupBorderColor").value = config.native_popup_border_color || "#343a46";
   $("nativePopupErrorColor").value = config.native_popup_error_color || "#ff8f9b";
   $("nativePopupShadowColor").value = config.native_popup_shadow_color || "#000000";
+  $("nativePopupOutlineColor").value = config.native_popup_outline_color || "#000000";
   updateSubtitleColorPreview();
 }
 
@@ -246,12 +303,15 @@ function subtitlePayload() {
     native_popup_click_through: $("nativePopupClickThrough").checked,
     native_popup_text_shadow: $("nativePopupTextShadow").checked,
     native_popup_shadow_offset: Number($("nativePopupShadowOffset").value),
+    native_popup_text_outline: $("nativePopupTextOutline").checked,
+    native_popup_outline_width: Number($("nativePopupOutlineWidth").value),
     native_popup_background_color: $("nativePopupBackgroundColor").value,
     native_popup_text_color: $("nativePopupTextColor").value,
     native_popup_muted_color: $("nativePopupMutedColor").value,
     native_popup_border_color: $("nativePopupBorderColor").value,
     native_popup_error_color: $("nativePopupErrorColor").value,
     native_popup_shadow_color: $("nativePopupShadowColor").value,
+    native_popup_outline_color: $("nativePopupOutlineColor").value,
   };
 }
 
@@ -758,6 +818,9 @@ $("promptFileInput").addEventListener("change", (event) => {
   "nativePopupErrorColor",
   "nativePopupShadowColor",
   "nativePopupShadowOffset",
+  "nativePopupTextOutline",
+  "nativePopupOutlineColor",
+  "nativePopupOutlineWidth",
   "nativePopupTextOpacity",
   "nativePopupBackgroundOpacity",
   "nativePopupFontFamily",

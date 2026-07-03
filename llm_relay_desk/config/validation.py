@@ -227,6 +227,15 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
     updated["native_popup_shadow_offset"] = _bounded_int(
         updated, "native_popup_shadow_offset", 2, 1, 8, "字幕阴影偏移"
     )
+    updated["native_popup_text_outline"] = bool(
+        updated.get("native_popup_text_outline", False)
+    )
+    updated["native_popup_outline_width"] = _bounded_int(
+        updated, "native_popup_outline_width", 0, 0, 8, "字幕描边宽度"
+    )
+    updated["native_popup_outline_color"] = _hex_color(
+        updated, "native_popup_outline_color", "#000000", "字幕描边颜色"
+    )
     updated["native_popup_shadow_color"] = _hex_color(
         updated, "native_popup_shadow_color", "#000000", "字幕阴影颜色"
     )

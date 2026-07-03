@@ -336,17 +336,18 @@ def compose_subtitle_image(
             fill=shadow_rgba,
             spacing=spacing,
             align=align,
-            stroke_width=max(1, round(font_size / 32)) if transparent else 0,
-            stroke_fill=shadow_rgba,
+            stroke_width=0,
         )
         blur_radius = max(0.8, shadow_offset * 0.72)
         shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(blur_radius))
         image = Image.alpha_composite(image, shadow_layer)
         draw = ImageDraw.Draw(image)
 
-    stroke_width = max(1, round(font_size / 30)) if transparent else 0
+    outline_enabled = bool(config.get("text_outline", False))
+    outline_width = max(0, min(8, int(config.get("outline_width", 0))))
+    stroke_width = outline_width if outline_enabled else 0
     stroke_fill = _rgba(
-        str(config.get("shadow_color", "#000000")), min(0.72, text_opacity * 0.68)
+        str(config.get("outline_color", "#000000")), text_opacity
     )
     draw.multiline_text(
         (text_x, text_y),

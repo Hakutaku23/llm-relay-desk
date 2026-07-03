@@ -18,6 +18,9 @@ def base_config() -> dict[str, object]:
         "text_shadow": True,
         "shadow_color": "#000000",
         "shadow_offset": 2,
+        "text_outline": False,
+        "outline_color": "#000000",
+        "outline_width": 0,
     }
 
 
@@ -156,3 +159,72 @@ def test_missing_cjk_font_uses_cjk_fallback() -> None:
     fallback_image = compose_subtitle_image(config=fallback, **kwargs)
     missing_image = compose_subtitle_image(config=missing, **kwargs)
     assert missing_image.tobytes() == fallback_image.tobytes()
+
+
+def test_outline_is_opt_in_and_does_not_tint_text_by_default() -> None:
+    config = base_config()
+    config.update({
+        "text_color": "#ff0000",
+        "text_shadow": False,
+        "text_outline": False,
+        "outline_width": 0,
+    })
+    plain = compose_subtitle_image(
+        width=640,
+        height=160,
+        status="模型",
+        body="颜色一致性测试",
+        body_kind=None,
+        positioning=False,
+        show_close=False,
+        config=config,
+    )
+    opaque_plain = [pixel for pixel in plain.get_flattened_data() if pixel[3] > 220]
+    assert opaque_plain
+    assert any(red > 245 and green < 8 and blue < 8 for red, green, blue, _ in opaque_plain)
+    assert not any(red < 30 and green < 30 and blue < 30 for red, green, blue, _ in opaque_plain)
+
+    outlined_config = {
+        **config,
+        "text_outline": True,
+        "outline_width": 2,
+        "outline_color": "#000000",
+    }
+    outlined = compose_subtitle_image(
+        width=640,
+        height=160,
+        status="模型",
+        body="颜色一致性测试",
+        body_kind=None,
+        positioning=False,
+        show_close=False,
+        config=outlined_config,
+    )
+    opaque_outlined = [pixel for pixel in outlined.get_flattened_data() if pixel[3] > 220]
+    assert any(red < 30 and green < 30 and blue < 30 for red, green, blue, _ in opaque_outlined)
+
+
+def test_shadow_layer_has_no_implicit_stroke() -> None:
+    config = base_config()
+    config.update({
+        "text_color": "#ff0000",
+        "text_shadow": True,
+        "shadow_offset": 2,
+        "text_outline": False,
+        "outline_width": 0,
+    })
+    image = compose_subtitle_image(
+        width=640,
+        height=160,
+        status="模型",
+        body="阴影不应自动描边",
+        body_kind=None,
+        positioning=False,
+        show_close=False,
+        config=config,
+    )
+    # The fill must retain fully saturated red pixels even with shadow enabled.
+    assert any(
+        red > 245 and green < 8 and blue < 8 and alpha > 220
+        for red, green, blue, alpha in image.get_flattened_data()
+    )

@@ -47,6 +47,9 @@ def test_validate_config_accepts_custom_position_and_colors(tmp_path: Path) -> N
             "native_popup_text_shadow": True,
             "native_popup_shadow_color": "#123456",
             "native_popup_shadow_offset": 4,
+            "native_popup_text_outline": True,
+            "native_popup_outline_color": "#654321",
+            "native_popup_outline_width": 2,
         },
     )
     assert result["native_popup_position"] == "custom"
@@ -59,6 +62,9 @@ def test_validate_config_accepts_custom_position_and_colors(tmp_path: Path) -> N
     assert result["native_popup_text_shadow"] is True
     assert result["native_popup_shadow_color"] == "#123456"
     assert result["native_popup_shadow_offset"] == 4
+    assert result["native_popup_text_outline"] is True
+    assert result["native_popup_outline_color"] == "#654321"
+    assert result["native_popup_outline_width"] == 2
 
 
 def test_validate_config_rejects_invalid_color(tmp_path: Path) -> None:
@@ -80,6 +86,9 @@ def test_transparent_background_defaults_are_safe() -> None:
     assert DEFAULT_CONFIG["native_popup_text_shadow"] is True
     assert DEFAULT_CONFIG["native_popup_shadow_color"] == "#000000"
     assert DEFAULT_CONFIG["native_popup_shadow_offset"] == 2
+    assert DEFAULT_CONFIG["native_popup_text_outline"] is False
+    assert DEFAULT_CONFIG["native_popup_outline_color"] == "#000000"
+    assert DEFAULT_CONFIG["native_popup_outline_width"] == 0
 
 
 def test_validate_config_rejects_invalid_shadow_offset(tmp_path: Path) -> None:
@@ -88,6 +97,13 @@ def test_validate_config_rejects_invalid_shadow_offset(tmp_path: Path) -> None:
         validate_config(store, {"native_popup_shadow_offset": 9})
     assert exc_info.value.status_code == 400
 
+
+
+
+def test_validate_config_rejects_invalid_outline_width(tmp_path: Path) -> None:
+    store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
+    with pytest.raises(HTTPException):
+        validate_config(store, {"native_popup_outline_width": 9})
 
 def test_validate_config_rejects_invalid_independent_opacity(tmp_path: Path) -> None:
     store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
