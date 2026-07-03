@@ -47,6 +47,8 @@ async def health(request: Request) -> dict[str, Any]:
         "native_popup_offset_y": config.get("native_popup_offset_y", 0),
         "native_popup_custom_x": config.get("native_popup_custom_x", 120),
         "native_popup_custom_y": config.get("native_popup_custom_y", 120),
+        "native_popup_font_family": config.get("native_popup_font_family", "Microsoft YaHei UI"),
+        "native_popup_text_align": config.get("native_popup_text_align", "left"),
         "native_popup_click_through": config.get(
             "native_popup_click_through", False
         ),

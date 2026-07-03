@@ -1,5 +1,5 @@
 {
-  "config_schema_version": 4,
+  "config_schema_version": 5,
   "upstream_base_url": "http://127.0.0.1:11435/v1",
   "upstream_api_key": "ollama",
   "local_api_key": "sk-local-ollama-change-me",
@@ -17,6 +17,8 @@
   "native_popup_width": 960,
   "native_popup_height": 220,
   "native_popup_font_size": 16,
+  "native_popup_font_family": "FangSong",
+  "native_popup_text_align": "left",
   "native_popup_opacity": 0.0,
   "native_popup_text_opacity": 1.0,
   "native_popup_background_opacity": 0.0,
@@ -25,10 +27,10 @@
   "native_popup_transparent_background": true,
   "native_popup_text_shadow": true,
   "native_popup_shadow_color": "#000000",
-  "native_popup_shadow_offset": 2,
+  "native_popup_shadow_offset": 1,
   "native_popup_background_color": "#ffffff",
-  "native_popup_text_color": "#d20404",
+  "native_popup_text_color": "#ff0000",
   "native_popup_muted_color": "#1ebe09",
   "native_popup_border_color": "#ffffff",
-  "native_popup_error_color": "#fb0921"
+  "native_popup_error_color": "#ff0019"
 }

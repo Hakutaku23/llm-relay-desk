@@ -50,6 +50,8 @@ class NativePopupController:
             "width": int(config.get("native_popup_width", 960)),
             "height": int(config.get("native_popup_height", 220)),
             "font_size": int(config.get("native_popup_font_size", 24)),
+            "font_family": str(config.get("native_popup_font_family", "Microsoft YaHei UI")),
+            "text_align": str(config.get("native_popup_text_align", "left")),
             "opacity": float(config.get("native_popup_opacity", 0.88)),
             "text_opacity": float(config.get("native_popup_text_opacity", 1.0)),
             "background_opacity": float(

@@ -29,7 +29,7 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
     with TestClient(app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "4.4.0"
+        assert health.json()["version"] == "4.5.0"
         ui = client.get("/ui/")
         assert ui.status_code == 200
         assert "data-tab=\"subtitle\"" in ui.text
@@ -38,9 +38,14 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
         assert "nativePopupTextOpacity" in ui.text
         assert "nativePopupBackgroundOpacity" in ui.text
         assert "nativePopupTextShadow" in ui.text
+        assert "nativePopupFontFamily" in ui.text
+        assert "nativePopupTextAlign" in ui.text
         config_section = ui.text.split('id="tab-config"', 1)[1].split('id="tab-subtitle"', 1)[0]
         assert "nativePopupEnabled" not in config_section
         assert client.get("/monitor/").status_code == 200
+        fonts = client.get("/admin/subtitle-fonts")
+        assert fonts.status_code == 200
+        assert isinstance(fonts.json()["fonts"], list)
 
 
 def test_route_contract_is_preserved(tmp_path: Path) -> None:
@@ -57,6 +62,7 @@ def test_route_contract_is_preserved(tmp_path: Path) -> None:
         ("/admin/config", "PUT"),
         ("/admin/subtitle-config", "GET"),
         ("/admin/subtitle-config", "PUT"),
+        ("/admin/subtitle-fonts", "GET"),
         ("/admin/subtitle-positioning/start", "POST"),
         ("/admin/subtitle-positioning/finish", "POST"),
         ("/admin/prompts", "GET"),
@@ -85,6 +91,8 @@ def test_subtitle_config_endpoint(tmp_path: Path) -> None:
                 "native_popup_background_color": "#112233",
                 "native_popup_text_color": "#abcdef",
                 "native_popup_click_through": True,
+                "native_popup_font_family": "Noto Sans CJK SC",
+                "native_popup_text_align": "right",
                 "native_popup_text_opacity": 0.75,
                 "native_popup_background_opacity": 0.0,
                 "native_popup_text_shadow": True,
@@ -100,6 +108,8 @@ def test_subtitle_config_endpoint(tmp_path: Path) -> None:
         assert subtitle["native_popup_background_color"] == "#112233"
         assert subtitle["native_popup_text_color"] == "#abcdef"
         assert subtitle["native_popup_click_through"] is True
+        assert subtitle["native_popup_font_family"] == "Noto Sans CJK SC"
+        assert subtitle["native_popup_text_align"] == "right"
         assert subtitle["native_popup_text_opacity"] == 0.75
         assert subtitle["native_popup_background_opacity"] == 0.0
         assert subtitle["native_popup_transparent_background"] is True

@@ -10,6 +10,8 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 
+from llm_relay_desk.desktop.fonts import resolve_font_path
+
 
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
@@ -77,7 +79,7 @@ def _font_candidates(*, bold: bool) -> list[Path]:
     names = (
         ("msyhbd.ttc", "msyh.ttc", "seguisb.ttf", "segoeui.ttf", "arialbd.ttf")
         if bold
-        else ("msyh.ttc", "msyhbd.ttc", "segoeui.ttf", "arial.ttf")
+        else ("msyh.ttc", "segoeui.ttf", "arial.ttf", "msyhbd.ttc")
     )
     candidates = [fonts / name for name in names]
     candidates.extend(
@@ -85,16 +87,29 @@ def _font_candidates(*, bold: bool) -> list[Path]:
             Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc")
             if bold
             else Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
-            Path("/usr/share/fonts/truetype/arphic/uming.ttc"),
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+            if bold
+            else Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
         ]
     )
     return candidates
 
 
-@lru_cache(maxsize=32)
-def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+@lru_cache(maxsize=128)
+def load_font(
+    size: int,
+    bold: bool = False,
+    family: str = "Microsoft YaHei UI",
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     safe_size = max(8, int(size))
-    for path in _font_candidates(bold=bold):
+    selected = resolve_font_path(str(family), bold=bold)
+    candidates = ([selected] if selected is not None else []) + _font_candidates(bold=bold)
+    seen: set[str] = set()
+    for path in candidates:
+        identity = str(path).casefold()
+        if identity in seen:
+            continue
+        seen.add(identity)
         try:
             if path.exists():
                 return ImageFont.truetype(str(path), safe_size)
@@ -104,6 +119,36 @@ def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFo
         return ImageFont.truetype("DejaVuSans.ttf", safe_size)
     except OSError:
         return ImageFont.load_default()
+
+
+def _contains_cjk(text: str) -> bool:
+    return any(
+        "\u3400" <= char <= "\u9fff"
+        or "\uf900" <= char <= "\ufaff"
+        for char in str(text)
+    )
+
+
+def _supports_cjk(font: ImageFont.ImageFont) -> bool:
+    try:
+        first = bytes(font.getmask("测"))
+        second = bytes(font.getmask("试"))
+    except Exception:
+        return False
+    return bool(first and second and first != second)
+
+
+def load_text_font(
+    size: int,
+    *,
+    family: str,
+    text: str,
+    bold: bool = False,
+) -> ImageFont.ImageFont:
+    selected = load_font(size, bold=bold, family=family)
+    if _contains_cjk(text) and not _supports_cjk(selected):
+        return load_font(size, bold=bold, family="Microsoft YaHei UI")
+    return selected
 
 
 def _fit_prefix(text: str, font: ImageFont.ImageFont, max_width: int) -> int:
@@ -202,9 +247,26 @@ def compose_subtitle_image(
             width=1 if not positioning else 2,
         )
 
-    body_font = load_font(font_size, bold=transparent)
-    status_font = load_font(max(11, round(font_size * 0.48)), bold=False)
-    close_font = load_font(max(14, round(font_size * 0.72)), bold=False)
+    font_family = str(config.get("font_family", "Microsoft YaHei UI")).strip() or "Microsoft YaHei UI"
+    text_align = str(config.get("text_align", "left")).strip().lower()
+    if text_align not in {"left", "center", "right"}:
+        text_align = "left"
+    # Do not force bold in transparent mode. Some CJK fonts become visually
+    # inflated when a bold face is selected automatically; the configured shadow
+    # and stroke already provide contrast against bright backgrounds.
+    body_font = load_text_font(
+        font_size,
+        bold=False,
+        family=font_family,
+        text=body or "",
+    )
+    status_font = load_text_font(
+        max(11, round(font_size * 0.48)),
+        bold=False,
+        family=font_family,
+        text=status,
+    )
+    close_font = load_font(max(14, round(font_size * 0.72)), bold=False, family=font_family)
 
     body_color_key = {
         "reasoning": "muted_color",
@@ -241,18 +303,21 @@ def compose_subtitle_image(
     body_text = "\n".join(visible_lines)
 
     text_bbox = draw.multiline_textbbox(
-        (0, 0), body_text, font=body_font, spacing=spacing, align="center" if transparent else "left"
+        (0, 0), body_text, font=body_font, spacing=spacing, align=text_align
     )
+    text_width = max(1, text_bbox[2] - text_bbox[0])
     text_height = max(1, text_bbox[3] - text_bbox[1])
-    if transparent:
-        text_width = max(1, text_bbox[2] - text_bbox[0])
+    if text_align == "center":
         text_x = max(padding_x, (width - text_width) // 2)
-        text_y = body_top + max(0, (available_height - text_height) // 2)
-        align = "center"
+    elif text_align == "right":
+        text_x = max(padding_x, width - padding_x - text_width)
     else:
         text_x = padding_x
+    if transparent:
+        text_y = body_top + max(0, (available_height - text_height) // 2)
+    else:
         text_y = body_top + max(0, available_height - text_height)
-        align = "left"
+    align = text_align
 
     shadow_enabled = bool(config.get("text_shadow", True))
     shadow_offset = max(1, min(8, int(config.get("shadow_offset", 2))))

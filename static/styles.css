@@ -444,8 +444,8 @@ textarea { resize: vertical; }
 
 
 .subtitle-preview.transparent-mode {
-  place-content: center;
-  text-align: center;
+  align-content: center;
+  justify-content: stretch;
   background-image:
     radial-gradient(circle at 18% 30%, rgba(255,255,255,.92), rgba(255,255,255,0) 34%),
     radial-gradient(circle at 76% 74%, rgba(21,32,51,.84), rgba(21,32,51,0) 40%),

@@ -1,6 +1,7 @@
 const state = {
   config: null,
   subtitle: null,
+  subtitleFonts: null,
   prompts: null,
 };
 
@@ -148,6 +149,8 @@ function updateSubtitleColorPreview() {
   if (!preview) return;
   const textOpacity = Number($("nativePopupTextOpacity").value) || 1;
   const backgroundOpacity = Math.max(0, Number($("nativePopupBackgroundOpacity").value) || 0);
+  const fontFamily = $("nativePopupFontFamily").value.trim() || "Microsoft YaHei UI";
+  const textAlign = $("nativePopupTextAlign").value || "left";
   const transparent = backgroundOpacity <= 0.001;
   const shadowEnabled = $("nativePopupTextShadow").checked;
   const shadowOffset = Number($("nativePopupShadowOffset").value) || 2;
@@ -157,6 +160,8 @@ function updateSubtitleColorPreview() {
     : "none";
 
   preview.classList.toggle("transparent-mode", transparent);
+  preview.style.fontFamily = `"${fontFamily.replaceAll('"', '')}", "Microsoft YaHei UI", sans-serif`;
+  preview.style.textAlign = textAlign;
   preview.style.backgroundColor = hexToRgba(
     $("nativePopupBackgroundColor").value,
     backgroundOpacity
@@ -174,6 +179,22 @@ function updateSubtitleColorPreview() {
   preview.querySelector("strong").style.textShadow = shadow;
 }
 
+async function loadSubtitleFonts() {
+  try {
+    const result = await request("/admin/subtitle-fonts");
+    state.subtitleFonts = result;
+    const list = $("subtitleFontList");
+    list.innerHTML = "";
+    for (const name of result.fonts || []) {
+      const option = document.createElement("option");
+      option.value = name;
+      list.appendChild(option);
+    }
+  } catch {
+    // Font selection remains a free-text field when local enumeration is unavailable.
+  }
+}
+
 async function loadSubtitleConfig() {
   state.subtitle = await request("/admin/subtitle-config");
   const config = state.subtitle || {};
@@ -187,6 +208,8 @@ async function loadSubtitleConfig() {
   $("nativePopupWidth").value = config.native_popup_width || 960;
   $("nativePopupHeight").value = config.native_popup_height || 220;
   $("nativePopupFontSize").value = config.native_popup_font_size || 24;
+  $("nativePopupFontFamily").value = config.native_popup_font_family || "Microsoft YaHei UI";
+  $("nativePopupTextAlign").value = config.native_popup_text_align || "left";
   $("nativePopupTextOpacity").value = config.native_popup_text_opacity ?? 1.0;
   $("nativePopupBackgroundOpacity").value = config.native_popup_background_opacity
     ?? (config.native_popup_transparent_background ? 0 : config.native_popup_opacity ?? 0.88);
@@ -215,6 +238,8 @@ function subtitlePayload() {
     native_popup_width: Number($("nativePopupWidth").value),
     native_popup_height: Number($("nativePopupHeight").value),
     native_popup_font_size: Number($("nativePopupFontSize").value),
+    native_popup_font_family: $("nativePopupFontFamily").value.trim() || "Microsoft YaHei UI",
+    native_popup_text_align: $("nativePopupTextAlign").value,
     native_popup_text_opacity: Number($("nativePopupTextOpacity").value),
     native_popup_background_opacity: Number($("nativePopupBackgroundOpacity").value),
     native_popup_show_reasoning: $("nativePopupShowReasoning").checked,
@@ -678,7 +703,13 @@ async function previewPopup() {
 async function refreshAll() {
   $("refreshAllBtn").disabled = true;
   try {
-    await Promise.all([loadHealth(), loadConfig(), loadSubtitleConfig(), loadPrompts()]);
+    await Promise.all([
+      loadHealth(),
+      loadConfig(),
+      loadSubtitleFonts(),
+      loadSubtitleConfig(),
+      loadPrompts(),
+    ]);
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -729,6 +760,8 @@ $("promptFileInput").addEventListener("change", (event) => {
   "nativePopupShadowOffset",
   "nativePopupTextOpacity",
   "nativePopupBackgroundOpacity",
+  "nativePopupFontFamily",
+  "nativePopupTextAlign",
   "nativePopupTextShadow",
 ].forEach((id) => $(id).addEventListener("input", updateSubtitleColorPreview));
 $("sendTestBtn").addEventListener("click", sendTest);

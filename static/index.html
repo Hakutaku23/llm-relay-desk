@@ -233,6 +233,21 @@
               <small>左框为宽度，右框为高度。</small>
             </div>
             <div class="field">
+              <label for="nativePopupFontFamily">字幕字体</label>
+              <input id="nativePopupFontFamily" list="subtitleFontList" value="Microsoft YaHei UI" autocomplete="off">
+              <datalist id="subtitleFontList"></datalist>
+              <small>列出服务所在电脑已安装的字体，也可以手动输入字体名称；不可用时自动回退到微软雅黑。</small>
+            </div>
+            <div class="field">
+              <label for="nativePopupTextAlign">文字对齐</label>
+              <select id="nativePopupTextAlign">
+                <option value="left">左对齐</option>
+                <option value="center">居中</option>
+                <option value="right">右对齐</option>
+              </select>
+              <small>背景完全透明时默认使用左对齐，不再强制居中。</small>
+            </div>
+            <div class="field">
               <label>字幕字号与文字透明度</label>
               <div class="inline-inputs">
                 <input id="nativePopupFontSize" type="number" min="12" max="72" value="24" aria-label="字幕字号">

@@ -7,6 +7,10 @@ from fastapi import HTTPException
 
 from llm_relay_desk.storage import JsonStore
 
+
+TEXT_ALIGN_VALUES = {"left", "center", "right"}
+FONT_FAMILY_MAX_LENGTH = 120
+
 POPUP_POSITIONS = {
     "top_left",
     "top_center",
@@ -152,6 +156,22 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
     updated["native_popup_font_size"] = _bounded_int(
         updated, "native_popup_font_size", 24, 12, 72, "字幕字号"
     )
+
+    font_family = str(
+        updated.get("native_popup_font_family", "Microsoft YaHei UI")
+    ).strip()
+    if not font_family:
+        font_family = "Microsoft YaHei UI"
+    if len(font_family) > FONT_FAMILY_MAX_LENGTH or any(
+        ord(char) < 32 for char in font_family
+    ):
+        raise HTTPException(status_code=400, detail="字幕字体名称无效")
+    updated["native_popup_font_family"] = font_family
+
+    text_align = str(updated.get("native_popup_text_align", "left")).strip().lower()
+    if text_align not in TEXT_ALIGN_VALUES:
+        raise HTTPException(status_code=400, detail="字幕文字对齐方式无效")
+    updated["native_popup_text_align"] = text_align
 
     legacy_opacity = _bounded_float(
         updated,

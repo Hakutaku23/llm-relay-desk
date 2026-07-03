@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from llm_relay_desk.api.dependencies import runtime_from_request
 from llm_relay_desk.config import validate_config
+from llm_relay_desk.desktop.fonts import font_catalog_payload
 from llm_relay_desk.monitoring import utc_now_iso
 from llm_relay_desk.proxy.common import timeout_config, upstream_headers
 
@@ -27,6 +28,8 @@ SUBTITLE_CONFIG_KEYS = {
     "native_popup_width",
     "native_popup_height",
     "native_popup_font_size",
+    "native_popup_font_family",
+    "native_popup_text_align",
     "native_popup_opacity",
     "native_popup_text_opacity",
     "native_popup_background_opacity",
@@ -75,6 +78,13 @@ async def put_config(
 @router.get("/subtitle-config")
 async def get_subtitle_config(request: Request) -> dict[str, Any]:
     return _subtitle_config(runtime_from_request(request).config_store.read())
+
+
+@router.get("/subtitle-fonts")
+async def get_subtitle_fonts() -> dict[str, object]:
+    """Return locally installed font families available to the desktop renderer."""
+
+    return await asyncio.to_thread(font_catalog_payload)
 
 
 @router.put("/subtitle-config")

@@ -102,3 +102,27 @@ def test_legacy_transparent_switch_maps_to_zero_background(tmp_path: Path) -> No
     result = validate_config(store, {"native_popup_transparent_background": True})
     assert result["native_popup_background_opacity"] == 0.0
     assert result["native_popup_text_opacity"] == 1.0
+
+
+def test_validate_config_accepts_font_family_and_alignment(tmp_path: Path) -> None:
+    store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
+    result = validate_config(
+        store,
+        {
+            "native_popup_font_family": "Noto Sans CJK SC",
+            "native_popup_text_align": "right",
+        },
+    )
+    assert result["native_popup_font_family"] == "Noto Sans CJK SC"
+    assert result["native_popup_text_align"] == "right"
+
+
+def test_validate_config_rejects_invalid_alignment(tmp_path: Path) -> None:
+    store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
+    with pytest.raises(HTTPException):
+        validate_config(store, {"native_popup_text_align": "justify"})
+
+
+def test_font_defaults_are_left_aligned() -> None:
+    assert DEFAULT_CONFIG["native_popup_font_family"] == "Microsoft YaHei UI"
+    assert DEFAULT_CONFIG["native_popup_text_align"] == "left"

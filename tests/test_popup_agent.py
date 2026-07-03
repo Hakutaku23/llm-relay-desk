@@ -211,7 +211,7 @@ def test_runtime_migrates_420_click_through_to_safe_default(tmp_path: Path) -> N
     )
     runtime = Runtime.create(settings)
     config = runtime.config_store.read()
-    assert config["config_schema_version"] == 4
+    assert config["config_schema_version"] == 5
     assert config["native_popup_click_through"] is False
 
 
@@ -244,7 +244,7 @@ def test_runtime_migrates_430_opacity_channels(tmp_path: Path) -> None:
     )
     runtime = Runtime.create(settings)
     config = runtime.config_store.read()
-    assert config["config_schema_version"] == 4
+    assert config["config_schema_version"] == 5
     assert config["native_popup_text_opacity"] == 1.0
     assert config["native_popup_background_opacity"] == 0.66
 

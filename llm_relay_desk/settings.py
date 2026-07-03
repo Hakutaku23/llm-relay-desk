@@ -10,11 +10,11 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-APP_VERSION = "4.4.0"
+APP_VERSION = "4.5.0"
 APP_TITLE = "LLM Relay Desk"
 APP_DESCRIPTION = "本地 LLM API 转发、提示词管理、Web 监视器与原生字幕浮层"
 
-CONFIG_SCHEMA_VERSION = 4
+CONFIG_SCHEMA_VERSION = 5
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "config_schema_version": CONFIG_SCHEMA_VERSION,
@@ -35,6 +35,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "native_popup_width": 960,
     "native_popup_height": 220,
     "native_popup_font_size": 24,
+    "native_popup_font_family": "Microsoft YaHei UI",
+    "native_popup_text_align": "left",
     "native_popup_opacity": 0.88,  # legacy combined opacity
     "native_popup_text_opacity": 1.0,
     "native_popup_background_opacity": 0.88,

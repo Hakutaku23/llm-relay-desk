@@ -26,6 +26,8 @@ DEFAULT_POPUP_CONFIG: dict[str, Any] = {
     "width": 960,
     "height": 220,
     "font_size": 24,
+    "font_family": "Microsoft YaHei UI",
+    "text_align": "left",
     "opacity": 0.88,  # legacy combined opacity
     "text_opacity": 1.0,
     "background_opacity": 0.88,
@@ -97,6 +99,10 @@ def normalize_popup_config(value: dict[str, Any] | None) -> dict[str, Any]:
         "width": _int_value(source.get("width"), 960, 320, 2400),
         "height": _int_value(source.get("height"), 220, 100, 900),
         "font_size": _int_value(source.get("font_size"), 24, 12, 72),
+        "font_family": str(source.get("font_family", "Microsoft YaHei UI")).strip() or "Microsoft YaHei UI",
+        "text_align": str(source.get("text_align", "left")).strip().lower()
+        if str(source.get("text_align", "left")).strip().lower() in {"left", "center", "right"}
+        else "left",
         "opacity": _float_value(source.get("opacity"), 0.88, 0.0, 1.0),
         "text_opacity": _float_value(source.get("text_opacity"), 1.0, 0.10, 1.0),
         "background_opacity": _float_value(
@@ -371,15 +377,21 @@ class SubtitleOverlay:
             activebackground=bg,
             activeforeground=text_color,
         )
+        font_family = config["font_family"]
+        text_align = config["text_align"]
+        self.status_label.configure(font=(font_family, 9))
+        self.interaction_label.configure(font=(font_family, 9, "bold"))
+        self.close_button.configure(font=(font_family, 12))
         self.text.configure(
             bg=bg,
             fg=text_color,
             insertbackground=text_color,
             selectbackground=border,
-            font=(FONT_FAMILY, config["font_size"]),
+            font=(font_family, config["font_size"]),
         )
-        self.text.tag_configure("reasoning", foreground=muted)
-        self.text.tag_configure("error", foreground=error)
+        self.text.tag_configure("body", justify=text_align)
+        self.text.tag_configure("reasoning", foreground=muted, justify=text_align)
+        self.text.tag_configure("error", foreground=error, justify=text_align)
         self.interaction_label.configure(bg=bg, fg=text_color)
         self.canvas.place_forget()
         self.text.place(x=0, y=0, relwidth=1, relheight=1)
@@ -392,15 +404,21 @@ class SubtitleOverlay:
         try:
             width = max(20, int(self.canvas.winfo_width()) - 4)
             height = max(20, int(self.canvas.winfo_height()) - 4)
+            justify = config["text_align"]
+            font = (config["font_family"], config["font_size"])
             self.canvas.itemconfigure(
                 self.canvas_text_item,
                 text=self.display_text,
                 width=width,
+                justify=justify,
+                font=font,
             )
             self.canvas.itemconfigure(
                 self.canvas_shadow_item,
                 text=self.display_text,
                 width=width,
+                justify=justify,
+                font=font,
                 state="normal" if config["text_shadow"] else "hidden",
             )
             self.canvas.update_idletasks()
@@ -788,7 +806,7 @@ class SubtitleOverlay:
         if tag:
             self.text.insert("end", text, tag)
         else:
-            self.text.insert("end", text)
+            self.text.insert("end", text, "body")
         self.text.see("end")
         self.text.configure(state="disabled")
         self._apply_visual_config(self._popup_config(), transparent=False)
@@ -803,7 +821,7 @@ class SubtitleOverlay:
         if tag:
             self.text.insert("end", text, tag)
         else:
-            self.text.insert("end", text)
+            self.text.insert("end", text, "body")
         current_chars = int(self.text.count("1.0", "end-1c", "chars")[0])
         if current_chars > DISPLAY_CHAR_LIMIT:
             remove_chars = current_chars - DISPLAY_CHAR_LIMIT
