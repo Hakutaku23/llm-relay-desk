@@ -10,11 +10,11 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-APP_VERSION = "4.6.0"
+APP_VERSION = "4.8.0"
 APP_TITLE = "LLM Relay Desk"
 APP_DESCRIPTION = "本地 LLM API 转发、提示词管理、Web 监视器与原生字幕浮层"
 
-CONFIG_SCHEMA_VERSION = 7
+CONFIG_SCHEMA_VERSION = 9
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "config_schema_version": CONFIG_SCHEMA_VERSION,
@@ -23,6 +23,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "upstream_api_key": "ollama",
     "local_api_key": "sk-local-ollama-change-me",
     "default_model": "qwen3.6:35b",
+    "force_reasoning_enabled": False,
     "default_reasoning_effort": "",
     "request_timeout_seconds": 600,
     "prompt_enabled": True,
@@ -41,6 +42,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "native_popup_opacity": 0.88,  # legacy combined opacity
     "native_popup_text_opacity": 1.0,
     "native_popup_background_opacity": 0.88,
+    "native_popup_content_mode": "dialogue",
+    "native_popup_dialogue_fields": ["response", "statement", "dialogue", "speech"],
+    "native_popup_plain_text_fallback": True,
+    "native_popup_force_upstream_stream": True,
     "native_popup_show_reasoning": False,
     "native_popup_click_through": False,
     "native_popup_transparent_background": False,

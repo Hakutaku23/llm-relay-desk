@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
+import uuid
 from typing import Any, AsyncIterator
 
 import httpx
@@ -18,8 +20,159 @@ from llm_relay_desk.monitoring.events import (
 from llm_relay_desk.runtime import Runtime
 
 from .common import error_from_body, timeout_config, upstream_headers
-from .extractors import publish_openai_object
+from .extractors import extract_reasoning, publish_openai_object, text_from_content
 from .parsers import OpenAISSEParser
+from .reasoning import apply_openai_reasoning_default
+
+
+class _OpenAIStreamCollector:
+    def __init__(self, runtime: Runtime, request_id: str, model: str) -> None:
+        self.runtime = runtime
+        self.request_id = request_id
+        self.model = model
+        self.buffer = bytearray()
+        self.response_id = f"chatcmpl-relay-{uuid.uuid4().hex[:12]}"
+        self.created = int(time.time())
+        self.role = "assistant"
+        self.content: list[str] = []
+        self.reasoning: list[str] = []
+        self.finish_reason: str | None = None
+        self.usage: Any = None
+        self.system_fingerprint: Any = None
+        self.service_tier: Any = None
+        self.tool_calls: dict[int, dict[str, Any]] = {}
+        self.error: str | None = None
+
+    def feed(self, chunk: bytes) -> None:
+        self.buffer.extend(chunk)
+        while True:
+            lf_index = self.buffer.find(b"\n\n")
+            crlf_index = self.buffer.find(b"\r\n\r\n")
+            candidates = [(lf_index, 2), (crlf_index, 4)]
+            candidates = [(pos, size) for pos, size in candidates if pos >= 0]
+            if not candidates:
+                break
+            pos, size = min(candidates, key=lambda item: item[0])
+            block = bytes(self.buffer[:pos])
+            del self.buffer[: pos + size]
+            self._process_block(block)
+
+    def finish(self) -> dict[str, Any]:
+        if self.buffer:
+            self._process_block(bytes(self.buffer))
+            self.buffer.clear()
+        message: dict[str, Any] = {
+            "role": self.role,
+            "content": "".join(self.content),
+        }
+        if self.reasoning:
+            message["reasoning_content"] = "".join(self.reasoning)
+        if self.tool_calls:
+            message["tool_calls"] = [
+                self.tool_calls[index] for index in sorted(self.tool_calls)
+            ]
+        result: dict[str, Any] = {
+            "id": self.response_id,
+            "object": "chat.completion",
+            "created": self.created,
+            "model": self.model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": message,
+                    "finish_reason": self.finish_reason or "stop",
+                }
+            ],
+        }
+        if self.usage is not None:
+            result["usage"] = self.usage
+        if self.system_fingerprint is not None:
+            result["system_fingerprint"] = self.system_fingerprint
+        if self.service_tier is not None:
+            result["service_tier"] = self.service_tier
+        return result
+
+    def _process_block(self, block: bytes) -> None:
+        data_lines: list[str] = []
+        text = block.decode("utf-8", errors="replace").replace("\r\n", "\n")
+        for line in text.split("\n"):
+            if line.startswith("data:"):
+                data_lines.append(line[5:].lstrip())
+        if not data_lines:
+            return
+        data = "\n".join(data_lines).strip()
+        if not data or data == "[DONE]":
+            return
+        try:
+            value = json.loads(data)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(value, dict):
+            return
+        if isinstance(value.get("error"), dict):
+            self.error = str(value["error"].get("message") or value["error"])
+            return
+
+        publish_openai_object(self.runtime.monitor, self.request_id, value)
+        if value.get("id"):
+            self.response_id = str(value["id"])
+        if isinstance(value.get("created"), (int, float)):
+            self.created = int(value["created"])
+        if value.get("model"):
+            self.model = str(value["model"])
+        if value.get("usage") is not None:
+            self.usage = value["usage"]
+        if value.get("system_fingerprint") is not None:
+            self.system_fingerprint = value["system_fingerprint"]
+        if value.get("service_tier") is not None:
+            self.service_tier = value["service_tier"]
+
+        choices = value.get("choices")
+        if not isinstance(choices, list):
+            return
+        for choice in choices:
+            if not isinstance(choice, dict):
+                continue
+            if choice.get("finish_reason") is not None:
+                self.finish_reason = str(choice["finish_reason"])
+            delta = choice.get("delta")
+            if not isinstance(delta, dict):
+                continue
+            if delta.get("role"):
+                self.role = str(delta["role"])
+            content = text_from_content(delta.get("content"))
+            reasoning = extract_reasoning(delta)
+            if content:
+                self.content.append(content)
+            if reasoning:
+                self.reasoning.append(reasoning)
+            self._absorb_tool_calls(delta.get("tool_calls"))
+
+    def _absorb_tool_calls(self, value: Any) -> None:
+        if not isinstance(value, list):
+            return
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            index = int(item.get("index") or 0)
+            current = self.tool_calls.setdefault(
+                index,
+                {
+                    "id": "",
+                    "type": "function",
+                    "function": {"name": "", "arguments": ""},
+                },
+            )
+            if item.get("id"):
+                current["id"] = str(item["id"])
+            if item.get("type"):
+                current["type"] = str(item["type"])
+            function = item.get("function")
+            if isinstance(function, dict):
+                if function.get("name"):
+                    current["function"]["name"] += str(function["name"])
+                if function.get("arguments"):
+                    current["function"]["arguments"] += str(function["arguments"])
 
 
 async def list_models(runtime: Runtime) -> Response:
@@ -67,8 +220,16 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
 
     payload["model"] = payload.get("model") or config["default_model"]
     payload["messages"] = runtime.prompts.inject_messages(messages, config)
+    apply_openai_reasoning_default(payload, config)
 
-    stream = bool(payload.get("stream", False))
+    client_stream = bool(payload.get("stream", False))
+    force_stream = bool(
+        not client_stream and config.get("native_popup_enabled", True)
+        and config.get("native_popup_force_upstream_stream", True)
+    )
+    upstream_stream = client_stream or force_stream
+    payload["stream"] = upstream_stream
+
     url = f"{config['upstream_base_url']}/chat/completions"
     request_id = new_request_id()
     started = publish_start(
@@ -78,7 +239,7 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
         api="openai",
         route="/v1/chat/completions",
         model=str(payload.get("model", "")),
-        stream=stream,
+        stream=client_stream,
     )
 
     client = httpx.AsyncClient(timeout=timeout_config(config), trust_env=False)
@@ -90,7 +251,7 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
             headers=upstream_headers(config),
             json=payload,
         )
-        upstream_response = await client.send(upstream_request, stream=stream)
+        upstream_response = await client.send(upstream_request, stream=upstream_stream)
     except httpx.RequestError as exc:
         await client.aclose()
         publish_error(
@@ -112,7 +273,50 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
             headers={"X-Relay-Request-ID": request_id},
         )
 
-    if not stream or upstream_response.status_code >= 400:
+    content_type = upstream_response.headers.get("content-type", "").lower()
+    if (
+        force_stream
+        and upstream_response.status_code < 400
+        and "text/event-stream" in content_type
+    ):
+        collector = _OpenAIStreamCollector(
+            runtime,
+            request_id,
+            str(payload.get("model", "")),
+        )
+        try:
+            async for chunk in upstream_response.aiter_raw():
+                collector.feed(chunk)
+            converted = collector.finish()
+            if collector.error:
+                publish_error(
+                    runtime.monitor,
+                    request_id,
+                    started,
+                    collector.error,
+                    502,
+                )
+                return JSONResponse(status_code=502, content={"error": {"message": collector.error}})
+            publish_done(runtime.monitor, request_id, started, upstream_response.status_code)
+            return JSONResponse(
+                content=converted,
+                status_code=upstream_response.status_code,
+                headers={"X-Relay-Request-ID": request_id},
+            )
+        except Exception as exc:
+            publish_error(
+                runtime.monitor,
+                request_id,
+                started,
+                f"读取上游流失败：{exc}",
+                upstream_response.status_code,
+            )
+            return JSONResponse(status_code=502, content={"error": {"message": str(exc)}})
+        finally:
+            await upstream_response.aclose()
+            await client.aclose()
+
+    if not upstream_stream or upstream_response.status_code >= 400 or force_stream:
         body = await upstream_response.aread()
         status_code = upstream_response.status_code
         media_type = upstream_response.headers.get(

@@ -29,11 +29,13 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
     with TestClient(app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "4.6.0"
+        assert health.json()["version"] == "4.8.0"
         ui = client.get("/ui/")
         assert ui.status_code == 200
         assert "data-tab=\"subtitle\"" in ui.text
         assert "upstreamProtocol" in ui.text
+        assert "forceReasoningEnabled" in ui.text
+        assert "defaultReasoningEffort" in ui.text
         assert "nativePopupBackgroundColor" in ui.text
         assert "nativePopupClickThrough" in ui.text
         assert "nativePopupTextOpacity" in ui.text
@@ -41,6 +43,10 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
         assert "nativePopupTextShadow" in ui.text
         assert "nativePopupFontFamily" in ui.text
         assert "nativePopupTextAlign" in ui.text
+        assert "nativePopupContentMode" in ui.text
+        assert "nativePopupDialogueFields" in ui.text
+        assert "nativePopupPlainTextFallback" in ui.text
+        assert "nativePopupForceUpstreamStream" in ui.text
         assert "nativePopupTextOutline" in ui.text
         assert "nativePopupOutlineColor" in ui.text
         assert "nativePopupOutlineWidth" in ui.text
@@ -107,6 +113,10 @@ def test_subtitle_config_endpoint(tmp_path: Path) -> None:
                 "native_popup_text_outline": True,
                 "native_popup_outline_color": "#020202",
                 "native_popup_outline_width": 2,
+                "native_popup_content_mode": "dialogue",
+                "native_popup_dialogue_fields": ["response", "statement"],
+                "native_popup_plain_text_fallback": True,
+                "native_popup_force_upstream_stream": True,
             },
         )
         assert response.status_code == 200
@@ -118,6 +128,9 @@ def test_subtitle_config_endpoint(tmp_path: Path) -> None:
         assert subtitle["native_popup_text_color"] == "#abcdef"
         assert subtitle["native_popup_click_through"] is True
         assert subtitle["native_popup_font_family"] == "Noto Sans CJK SC"
+        assert subtitle["native_popup_content_mode"] == "dialogue"
+        assert subtitle["native_popup_dialogue_fields"] == ["response", "statement"]
+        assert subtitle["native_popup_force_upstream_stream"] is True
         assert subtitle["native_popup_text_align"] == "right"
         assert subtitle["native_popup_text_opacity"] == 0.75
         assert subtitle["native_popup_background_opacity"] == 0.0

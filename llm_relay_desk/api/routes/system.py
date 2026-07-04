@@ -34,12 +34,22 @@ async def health(request: Request) -> dict[str, Any]:
         "upstream_protocol": config.get("upstream_protocol", "auto"),
         "resolved_upstream_protocol": resolve_upstream_protocol(config),
         "model": config.get("default_model"),
+        "force_reasoning_enabled": config.get("force_reasoning_enabled", False),
+        "default_reasoning_effort": config.get("default_reasoning_effort", ""),
         "prompt_enabled": config.get("prompt_enabled"),
         "active_prompt": active,
         "active_prompt_length": len(prompt),
         "monitor_history_count": len(runtime.monitor.records),
         "monitor_clients": len(runtime.monitor.subscribers),
         "native_popup_enabled": config.get("native_popup_enabled", True),
+        "native_popup_content_mode": config.get("native_popup_content_mode", "dialogue"),
+        "native_popup_dialogue_fields": config.get(
+            "native_popup_dialogue_fields",
+            ["response", "statement", "dialogue", "speech"],
+        ),
+        "native_popup_force_upstream_stream": config.get(
+            "native_popup_force_upstream_stream", True
+        ),
         "native_popup_close_seconds": config.get(
             "native_popup_close_seconds", 30
         ),

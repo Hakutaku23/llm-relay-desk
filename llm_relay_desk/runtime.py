@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from llm_relay_desk.desktop import NativePopupController
+from llm_relay_desk.desktop import NativePopupController, SubtitleEventRouter
 from llm_relay_desk.monitoring import MonitorHub
 from llm_relay_desk.prompts import PromptService
 from llm_relay_desk.settings import (
@@ -22,6 +22,7 @@ class Runtime:
     prompts: PromptService
     popup: NativePopupController
     monitor: MonitorHub
+    subtitle_router: SubtitleEventRouter
 
     @classmethod
     def create(cls, settings: Settings) -> "Runtime":
@@ -70,7 +71,8 @@ class Runtime:
             )
 
         popup = NativePopupController(on_position_saved=save_popup_position)
-        monitor = MonitorHub(sinks=[popup.publish])
+        subtitle_router = SubtitleEventRouter(popup, config_store)
+        monitor = MonitorHub(sinks=[subtitle_router.publish])
         return cls(
             settings=settings,
             config_store=config_store,
@@ -78,4 +80,5 @@ class Runtime:
             prompts=PromptService(prompt_store),
             popup=popup,
             monitor=monitor,
+            subtitle_router=subtitle_router,
         )

@@ -67,3 +67,17 @@ Windows 下 `desktop/layered_renderer.py` 使用 Pillow 生成 RGBA 位图，再
 ## 协议适配边界
 
 `proxy/native.py` 只负责选择原生转发或协议适配。`proxy/protocol.py` 解析 `auto/openai/ollama` 上游模式；`proxy/ollama_openai_adapter.py` 负责 Ollama 请求到 OpenAI 请求、OpenAI SSE 到 Ollama NDJSON 以及模型/嵌入接口的格式转换。适配层仍通过统一监视事件发布正文和推理内容，不直接依赖桌面字幕实现。
+
+
+## 字幕语义过滤与内部流式聚合
+
+`MonitorHub` 始终保存原始模型正文和推理内容。桌面字幕不再直接订阅原始事件，而是经过 `desktop/subtitle_events.py`：
+
+1. 普通文本按配置直接展示。
+2. 结构化 JSON 只增量提取配置的顶层对话字段。
+3. 没有对话字段的事件/控制响应不创建字幕窗口。
+4. Web 监视器仍可查看完整原始输出，字幕过滤不会修改下游 API 响应。
+
+当调用方请求 `stream:false` 且开启字幕内部流式时，代理将上游请求改为流式并实时发布监视事件，随后聚合为调用方原协议的非流式响应。该逻辑分别位于 OpenAI 转发、Ollama 原生转发和 Ollama→OpenAI 适配模块中。
+
+- `proxy/reasoning.py`：统一处理调用方思考参数检测与代理默认思考注入。

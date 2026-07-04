@@ -11,6 +11,8 @@ from llm_relay_desk.storage import JsonStore
 TEXT_ALIGN_VALUES = {"left", "center", "right"}
 FONT_FAMILY_MAX_LENGTH = 120
 UPSTREAM_PROTOCOL_VALUES = {"auto", "openai", "ollama"}
+SUBTITLE_CONTENT_MODE_VALUES = {"dialogue", "all"}
+DIALOGUE_FIELD_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]{0,63}$")
 
 POPUP_POSITIONS = {
     "top_left",
@@ -104,6 +106,9 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
     ).strip()
     updated["local_api_key"] = str(updated.get("local_api_key", "")).strip()
     updated["default_model"] = str(updated.get("default_model", "")).strip()
+    updated["force_reasoning_enabled"] = bool(
+        updated.get("force_reasoning_enabled", False)
+    )
 
     reasoning = str(updated.get("default_reasoning_effort", "")).strip().lower()
     if reasoning not in {"", "none", "low", "medium", "high", "max"}:
@@ -221,6 +226,42 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
     # Keep the legacy keys synchronized for older clients.
     updated["native_popup_opacity"] = background_opacity
     updated["native_popup_transparent_background"] = background_opacity <= 0.001
+    content_mode = str(
+        updated.get("native_popup_content_mode", "dialogue")
+    ).strip().lower()
+    if content_mode not in SUBTITLE_CONTENT_MODE_VALUES:
+        raise HTTPException(status_code=400, detail="字幕内容模式必须为 dialogue/all")
+    updated["native_popup_content_mode"] = content_mode
+
+    fields_value = updated.get(
+        "native_popup_dialogue_fields",
+        ["response", "statement", "dialogue", "speech"],
+    )
+    if isinstance(fields_value, str):
+        raw_fields = fields_value.split(",")
+    elif isinstance(fields_value, list):
+        raw_fields = fields_value
+    else:
+        raise HTTPException(status_code=400, detail="字幕对话字段必须为列表或逗号分隔文本")
+    dialogue_fields: list[str] = []
+    for item in raw_fields:
+        field_name = str(item).strip()
+        if not field_name:
+            continue
+        if not DIALOGUE_FIELD_PATTERN.fullmatch(field_name):
+            raise HTTPException(status_code=400, detail=f"字幕对话字段无效：{field_name}")
+        if field_name not in dialogue_fields:
+            dialogue_fields.append(field_name)
+    if not dialogue_fields or len(dialogue_fields) > 16:
+        raise HTTPException(status_code=400, detail="字幕对话字段数量范围为 1～16")
+    updated["native_popup_dialogue_fields"] = dialogue_fields
+    updated["native_popup_plain_text_fallback"] = bool(
+        updated.get("native_popup_plain_text_fallback", True)
+    )
+    updated["native_popup_force_upstream_stream"] = bool(
+        updated.get("native_popup_force_upstream_stream", True)
+    )
+
     updated["native_popup_show_reasoning"] = bool(
         updated.get("native_popup_show_reasoning", False)
     )

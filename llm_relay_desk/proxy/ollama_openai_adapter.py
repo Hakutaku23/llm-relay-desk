@@ -23,6 +23,7 @@ from llm_relay_desk.runtime import Runtime
 
 from .common import error_from_body, openai_upstream_base, timeout_config, upstream_headers
 from .extractors import extract_reasoning, publish_native_object, text_from_content
+from .reasoning import apply_openai_reasoning_default
 
 
 def _now_iso() -> str:
@@ -183,12 +184,21 @@ def _apply_options(native: dict[str, Any], payload: dict[str, Any]) -> None:
         # not the newer json_schema response format. Prefer broad compatibility.
         payload["response_format"] = {"type": "json_object"}
 
+    direct_thinking = native.get("thinking")
+    direct_effort = native.get("reasoning_effort")
     think = native.get("think")
-    if isinstance(think, bool):
+
+    if "thinking" in native:
+        payload["thinking"] = direct_thinking
+    elif isinstance(think, bool):
         payload["thinking"] = {"type": "enabled" if think else "disabled"}
     elif isinstance(think, str) and think.strip():
-        effort = think.strip().lower()
         payload["thinking"] = {"type": "enabled"}
+
+    if "reasoning_effort" in native:
+        payload["reasoning_effort"] = direct_effort
+    elif isinstance(think, str) and think.strip():
+        effort = think.strip().lower()
         if effort in {"low", "medium", "high", "max", "xhigh"}:
             payload["reasoning_effort"] = effort
 
@@ -213,6 +223,7 @@ def _chat_payload(runtime: Runtime, native: dict[str, Any], config: dict[str, An
         "stream": bool(native.get("stream", True)),
     }
     _apply_options(native, payload)
+    apply_openai_reasoning_default(payload, config, caller_payload=native)
     return payload
 
 
@@ -231,6 +242,7 @@ def _generate_payload(runtime: Runtime, native: dict[str, Any], config: dict[str
         "stream": bool(native_copy.get("stream", True)),
     }
     _apply_options(native_copy, payload)
+    apply_openai_reasoning_default(payload, config, caller_payload=native)
     return payload
 
 
@@ -520,6 +532,85 @@ async def _forward_embeddings(request: Request, config: dict[str, Any], legacy: 
     )
 
 
+async def _collect_sse_as_nonstream_ollama(
+    runtime: Runtime,
+    upstream_response: httpx.Response,
+    request_id: str,
+    model: str,
+    mode: str,
+    started_request: float,
+) -> dict[str, Any]:
+    decoder = _SSEDecoder()
+    state = _StreamState(model)
+    content_parts: list[str] = []
+    reasoning_parts: list[str] = []
+
+    def absorb(value: dict[str, Any]) -> None:
+        for converted in _stream_delta_objects(value, state, mode):
+            publish_native_object(runtime.monitor, request_id, converted)
+            if mode == "chat":
+                message = converted.get("message")
+                if isinstance(message, dict):
+                    content = message.get("content")
+                    reasoning = message.get("thinking")
+                else:
+                    content = ""
+                    reasoning = ""
+            else:
+                content = converted.get("response")
+                reasoning = converted.get("thinking")
+            if isinstance(content, str) and content:
+                content_parts.append(content)
+            if isinstance(reasoning, str) and reasoning:
+                reasoning_parts.append(reasoning)
+
+    async for chunk in upstream_response.aiter_raw():
+        for data in decoder.feed(chunk):
+            if not data or data == "[DONE]":
+                continue
+            try:
+                value = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict) and isinstance(value.get("error"), (dict, str)):
+                error = value["error"]
+                message = str(error.get("message") if isinstance(error, dict) else error)
+                raise RuntimeError(message)
+            if isinstance(value, dict):
+                absorb(value)
+    for data in decoder.flush():
+        if not data or data == "[DONE]":
+            continue
+        try:
+            value = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            absorb(value)
+
+    final = _done_object(
+        model=state.model,
+        mode=mode,
+        finish_reason=state.finish_reason,
+        usage=state.usage,
+        started=started_request,
+        tool_calls=state.ollama_tool_calls(),
+    )
+    if mode == "chat":
+        message = final.get("message")
+        if not isinstance(message, dict):
+            message = {"role": "assistant"}
+            final["message"] = message
+        message["content"] = "".join(content_parts)
+        if reasoning_parts:
+            message["thinking"] = "".join(reasoning_parts)
+    else:
+        final["response"] = "".join(content_parts)
+        if reasoning_parts:
+            final["thinking"] = "".join(reasoning_parts)
+    return final
+
+
 async def _forward_chat_or_generate(
     runtime: Runtime,
     request: Request,
@@ -533,7 +624,13 @@ async def _forward_chat_or_generate(
 
     payload = _chat_payload(runtime, native, config) if mode == "chat" else _generate_payload(runtime, native, config)
     model = str(payload["model"])
-    stream = bool(payload.get("stream", True))
+    client_stream = bool(payload.get("stream", True))
+    force_stream = bool(
+        not client_stream and config.get("native_popup_enabled", True)
+        and config.get("native_popup_force_upstream_stream", True)
+    )
+    upstream_stream = client_stream or force_stream
+    payload["stream"] = upstream_stream
     url = f"{openai_upstream_base(config)}/chat/completions"
     request_id = new_request_id()
     started_monitor = publish_start(
@@ -543,7 +640,7 @@ async def _forward_chat_or_generate(
         api="ollama-adapter",
         route=f"/api/{mode}",
         model=model,
-        stream=stream,
+        stream=client_stream,
     )
     started_request = time.perf_counter()
     client = httpx.AsyncClient(timeout=timeout_config(config), trust_env=False)
@@ -554,7 +651,7 @@ async def _forward_chat_or_generate(
             headers=upstream_headers(config),
             json=payload,
         )
-        upstream_response = await client.send(upstream_request, stream=stream)
+        upstream_response = await client.send(upstream_request, stream=upstream_stream)
     except httpx.RequestError as exc:
         await client.aclose()
         publish_error(runtime.monitor, request_id, started_monitor, str(exc), 502)
@@ -565,7 +662,40 @@ async def _forward_chat_or_generate(
         )
 
     content_type = upstream_response.headers.get("content-type", "").lower()
-    if not stream or upstream_response.status_code >= 400 or "text/event-stream" not in content_type:
+    if (
+        force_stream
+        and upstream_response.status_code < 400
+        and "text/event-stream" in content_type
+    ):
+        try:
+            converted = await _collect_sse_as_nonstream_ollama(
+                runtime,
+                upstream_response,
+                request_id,
+                model,
+                mode,
+                started_request,
+            )
+            publish_done(runtime.monitor, request_id, started_monitor, upstream_response.status_code)
+            return JSONResponse(
+                content=converted,
+                status_code=upstream_response.status_code,
+                headers={"X-Relay-Request-ID": request_id},
+            )
+        except Exception as exc:
+            publish_error(
+                runtime.monitor,
+                request_id,
+                started_monitor,
+                str(exc),
+                upstream_response.status_code,
+            )
+            return JSONResponse(status_code=502, content={"error": str(exc)})
+        finally:
+            await upstream_response.aclose()
+            await client.aclose()
+
+    if not upstream_stream or upstream_response.status_code >= 400 or "text/event-stream" not in content_type:
         body = await upstream_response.aread()
         status_code = upstream_response.status_code
         await upstream_response.aclose()
@@ -587,7 +717,7 @@ async def _forward_chat_or_generate(
         )
         publish_native_object(runtime.monitor, request_id, converted)
         publish_done(runtime.monitor, request_id, started_monitor, status_code)
-        if stream:
+        if client_stream:
             return Response(
                 content=_json_line(converted),
                 media_type="application/x-ndjson",

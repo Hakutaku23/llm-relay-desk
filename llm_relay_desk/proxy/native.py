@@ -26,7 +26,72 @@ from .common import (
 from .extractors import publish_native_object
 from .ollama_openai_adapter import forward_openai_as_ollama
 from .protocol import resolve_upstream_protocol
+from .reasoning import apply_ollama_reasoning_default
 from .parsers import NativeNDJSONParser
+
+
+class _NativeStreamCollector:
+    def __init__(self, runtime: Runtime, request_id: str, mode: str) -> None:
+        self.runtime = runtime
+        self.request_id = request_id
+        self.mode = mode
+        self.buffer = bytearray()
+        self.content: list[str] = []
+        self.reasoning: list[str] = []
+        self.last: dict[str, Any] = {}
+        self.last_message: dict[str, Any] = {}
+
+    def feed(self, chunk: bytes) -> None:
+        self.buffer.extend(chunk)
+        while True:
+            index = self.buffer.find(b"\n")
+            if index < 0:
+                break
+            line = bytes(self.buffer[:index]).strip()
+            del self.buffer[: index + 1]
+            self._process(line)
+
+    def finish(self) -> dict[str, Any]:
+        self._process(bytes(self.buffer).strip())
+        self.buffer.clear()
+        result = dict(self.last)
+        result["done"] = True
+        if self.mode == "chat":
+            message = dict(self.last_message)
+            message.setdefault("role", "assistant")
+            message["content"] = "".join(self.content)
+            if self.reasoning:
+                message["thinking"] = "".join(self.reasoning)
+            result["message"] = message
+        else:
+            result["response"] = "".join(self.content)
+            if self.reasoning:
+                result["thinking"] = "".join(self.reasoning)
+        return result
+
+    def _process(self, line: bytes) -> None:
+        if not line:
+            return
+        try:
+            value = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return
+        if not isinstance(value, dict):
+            return
+        self.last = value
+        publish_native_object(self.runtime.monitor, self.request_id, value)
+        message = value.get("message")
+        if isinstance(message, dict):
+            self.last_message.update(message)
+            content = message.get("content")
+            thinking = message.get("thinking") or message.get("reasoning")
+        else:
+            content = value.get("response")
+            thinking = value.get("thinking") or value.get("reasoning")
+        if isinstance(content, str) and content:
+            self.content.append(content)
+        if isinstance(thinking, str) and thinking:
+            self.reasoning.append(thinking)
 
 
 async def forward_native_request(
@@ -65,8 +130,21 @@ async def forward_native_request(
             payload["model"] = payload.get("model") or config["default_model"]
             runtime.prompts.inject_generate_system(payload, config)
 
-    stream = bool(payload.get("stream", True)) if payload is not None else False
+        if inject_prompt_mode in {"chat", "generate"}:
+            apply_ollama_reasoning_default(payload, config)
+
+    client_stream = bool(payload.get("stream", True)) if payload is not None else False
     monitored = inject_prompt_mode in {"chat", "generate"}
+    force_stream = bool(
+        monitored
+        and not client_stream
+        and config.get("native_popup_enabled", True)
+        and config.get("native_popup_force_upstream_stream", True)
+    )
+    upstream_stream = client_stream or force_stream
+    if payload is not None and monitored:
+        payload["stream"] = upstream_stream
+
     request_id = new_request_id() if monitored else ""
     started = (
         publish_start(
@@ -76,7 +154,7 @@ async def forward_native_request(
             api="ollama",
             route=path,
             model=str((payload or {}).get("model", config.get("default_model", ""))),
-            stream=stream,
+            stream=client_stream,
         )
         if monitored
         else 0.0
@@ -91,7 +169,7 @@ async def forward_native_request(
             headers=upstream_headers(config),
             json=payload if method not in {"GET", "HEAD"} else None,
         )
-        upstream_response = await client.send(upstream_request, stream=stream)
+        upstream_response = await client.send(upstream_request, stream=upstream_stream)
     except httpx.RequestError as exc:
         await client.aclose()
         if monitored:
@@ -111,7 +189,37 @@ async def forward_native_request(
             headers={"X-Relay-Request-ID": request_id} if monitored else None,
         )
 
-    if not stream or upstream_response.status_code >= 400:
+    content_type = upstream_response.headers.get("content-type", "").lower()
+    if force_stream and upstream_response.status_code < 400:
+        collector = _NativeStreamCollector(
+            runtime,
+            request_id,
+            "chat" if inject_prompt_mode == "chat" else "generate",
+        )
+        try:
+            async for chunk in upstream_response.aiter_raw():
+                collector.feed(chunk)
+            converted = collector.finish()
+            publish_done(runtime.monitor, request_id, started, upstream_response.status_code)
+            return JSONResponse(
+                content=converted,
+                status_code=upstream_response.status_code,
+                headers={"X-Relay-Request-ID": request_id},
+            )
+        except Exception as exc:
+            publish_error(
+                runtime.monitor,
+                request_id,
+                started,
+                f"读取上游流失败：{exc}",
+                upstream_response.status_code,
+            )
+            return JSONResponse(status_code=502, content={"error": str(exc)})
+        finally:
+            await upstream_response.aclose()
+            await client.aclose()
+
+    if not upstream_stream or upstream_response.status_code >= 400 or force_stream:
         body = await upstream_response.aread()
         status_code = upstream_response.status_code
         media_type = upstream_response.headers.get(

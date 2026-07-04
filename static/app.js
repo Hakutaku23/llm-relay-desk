@@ -105,6 +105,8 @@ async function loadConfig() {
   $("upstreamApiKey").value = state.config.upstream_api_key || "";
   $("localApiKey").value = state.config.local_api_key || "";
   $("defaultModel").value = state.config.default_model || "";
+  $("forceReasoningEnabled").checked = Boolean(state.config.force_reasoning_enabled);
+  $("defaultReasoningEffort").value = state.config.default_reasoning_effort || "";
   $("requestTimeout").value = state.config.request_timeout_seconds || 600;
   $("promptEnabled").checked = Boolean(state.config.prompt_enabled);
   $("recommendedApiKey").textContent = state.config.local_api_key || "无需密钥";
@@ -119,6 +121,8 @@ async function saveConfig() {
     upstream_api_key: $("upstreamApiKey").value.trim(),
     local_api_key: $("localApiKey").value.trim(),
     default_model: $("defaultModel").value.trim(),
+    force_reasoning_enabled: $("forceReasoningEnabled").checked,
+    default_reasoning_effort: $("defaultReasoningEffort").value,
     request_timeout_seconds: Number($("requestTimeout").value),
     prompt_enabled: $("promptEnabled").checked,
   };
@@ -269,6 +273,10 @@ async function loadSubtitleConfig() {
   $("nativePopupTextOpacity").value = config.native_popup_text_opacity ?? 1.0;
   $("nativePopupBackgroundOpacity").value = config.native_popup_background_opacity
     ?? (config.native_popup_transparent_background ? 0 : config.native_popup_opacity ?? 0.88);
+  $("nativePopupContentMode").value = config.native_popup_content_mode || "dialogue";
+  $("nativePopupDialogueFields").value = (config.native_popup_dialogue_fields || ["response", "statement", "dialogue", "speech"]).join(", ");
+  $("nativePopupPlainTextFallback").checked = config.native_popup_plain_text_fallback !== false;
+  $("nativePopupForceUpstreamStream").checked = config.native_popup_force_upstream_stream !== false;
   $("nativePopupShowReasoning").checked = Boolean(config.native_popup_show_reasoning);
   $("nativePopupClickThrough").checked = config.native_popup_click_through === true;
   $("nativePopupTextShadow").checked = config.native_popup_text_shadow !== false;
@@ -301,6 +309,13 @@ function subtitlePayload() {
     native_popup_text_align: $("nativePopupTextAlign").value,
     native_popup_text_opacity: Number($("nativePopupTextOpacity").value),
     native_popup_background_opacity: Number($("nativePopupBackgroundOpacity").value),
+    native_popup_content_mode: $("nativePopupContentMode").value,
+    native_popup_dialogue_fields: $("nativePopupDialogueFields").value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+    native_popup_plain_text_fallback: $("nativePopupPlainTextFallback").checked,
+    native_popup_force_upstream_stream: $("nativePopupForceUpstreamStream").checked,
     native_popup_show_reasoning: $("nativePopupShowReasoning").checked,
     native_popup_click_through: $("nativePopupClickThrough").checked,
     native_popup_text_shadow: $("nativePopupTextShadow").checked,

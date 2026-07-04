@@ -1,5 +1,33 @@
 # Changelog
 
+## 4.8.0
+
+- 新增“代理强制思考”开关。调用方未提供 `think`、`thinking` 或 `reasoning_effort` 时，代理可自动启用模型思考。
+- 新增默认思考强度设置，支持由模型决定、low、medium、high、max。
+- 调用方显式传入 `think: false`、`thinking: disabled` 或 `reasoning_effort: none` 时保持调用方选择，不进行覆盖。
+- Ollama 原生上游自动补充 `think`；OpenAI 兼容上游自动补充 `reasoning_effort`，DeepSeek 上游同时使用 `thinking: {type: enabled}`。
+- 强制思考同时覆盖 `/v1/chat/completions`、Ollama 原生 `/api/chat`/`/api/generate` 以及 Ollama→OpenAI 协议适配链路。
+- `/health` 增加思考开关和默认强度状态。
+- 配置架构升级到 v9，默认关闭强制思考，避免升级后改变既有模型行为。
+
+## 4.7.1
+
+- 修复默认“仅提取对话字段”模式下，即使开启“字幕中显示推理内容”，前置推理分片仍被丢弃的问题。
+- 开启推理显示后，首个 `reasoning_delta` 会立即创建字幕并持续流式更新。
+- 最终正文到达后仍按原逻辑替换推理内容。
+- 更新字幕设置说明，明确短正文可能只包含一个内容分片，不进行人工打字模拟。
+
+## 4.7.0
+
+- 新增字幕内容过滤器，默认只从结构化模型输出中提取顶层 `response`、`statement`、`dialogue`、`speech` 字段。
+- 结构化 JSON 中的 action、reason、events、关系变化和其他控制参数不再进入桌面字幕；Web 实时监视器仍保留原始完整输出。
+- 新增“字幕内容模式”，可在“仅提取对话字段”和“显示模型全部文本”之间切换。
+- 新增可配置对话字段列表和“普通文本作为对话显示”开关。
+- 新增“非流式调用内部转为流式生成”：调用方发送 `stream:false` 时，代理可向上游发送流式请求，实时更新字幕，再聚合为原协议的非流式响应返回。
+- 内部流式聚合同时支持 OpenAI `/v1/chat/completions`、Ollama 原生 `/api/chat`/`/api/generate` 和 Ollama→OpenAI 协议适配链路。
+- 该功能不会强制开启模型推理，不修改客户端最终响应形态；字幕关闭时不会额外改变非流式请求。
+- 配置架构升级到 v8，并增加结构化对话提取、控制 JSON 抑制、普通文本回退和三类非流式聚合回归测试。
+
 ## 4.6.0
 
 - 新增 Ollama 客户端到 OpenAI 兼容上游的协议适配层。

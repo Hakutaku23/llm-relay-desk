@@ -136,10 +136,24 @@
               <label for="defaultModel">默认模型</label>
               <input id="defaultModel" placeholder="qwen3.6:35b">
             </div>
+            <div class="field switch-field">
+              <label>代理强制思考</label>
+              <label class="switch">
+                <input id="forceReasoningEnabled" type="checkbox">
+                <span class="slider"></span>
+              </label>
+              <small>仅当调用方没有提供 think、thinking 或 reasoning_effort 时生效。</small>
+            </div>
             <div class="field">
-              <label>思考参数策略</label>
-              <input value="完全透传，不自动添加 reasoning_effort / think" readonly>
-              <small>客户端未设置时，由 Ollama 和模型默认行为决定。</small>
+              <label for="defaultReasoningEffort">默认思考强度</label>
+              <select id="defaultReasoningEffort">
+                <option value="">开启思考，由模型决定</option>
+                <option value="low">低</option>
+                <option value="medium">中</option>
+                <option value="high">高</option>
+                <option value="max">最高</option>
+              </select>
+              <small>调用方显式关闭思考时不会被覆盖；不同模型对强度参数的支持可能不同。</small>
             </div>
             <div class="field">
               <label for="requestTimeout">请求超时（秒）</label>
@@ -192,6 +206,36 @@
               <input id="nativePopupCloseSeconds" type="number" min="1" max="3600" value="30">
               <small>新请求在窗口关闭前到来时，会清空并复用同一个字幕框。</small>
             </div>
+            <div class="field">
+              <label for="nativePopupContentMode">字幕内容模式</label>
+              <select id="nativePopupContentMode">
+                <option value="dialogue">仅提取对话字段（推荐）</option>
+                <option value="all">显示模型全部文本</option>
+              </select>
+              <small>对结构化 JSON 只显示 response、statement 等对话字段；事件、动作和控制参数不会进入字幕。</small>
+            </div>
+            <div class="field">
+              <label for="nativePopupDialogueFields">对话字段名称</label>
+              <input id="nativePopupDialogueFields" type="text" value="response, statement, dialogue, speech">
+              <small>使用英文逗号分隔，按模型输出中的顶层 JSON 字段匹配。</small>
+            </div>
+            <div class="field switch-field">
+              <label>普通文本作为对话显示</label>
+              <label class="switch">
+                <input id="nativePopupPlainTextFallback" type="checkbox" checked>
+                <span class="slider"></span>
+              </label>
+              <small>模型直接返回自然语言而不是 JSON 时，仍按普通字幕显示。</small>
+            </div>
+            <div class="field switch-field">
+              <label>非流式调用内部转为流式生成</label>
+              <label class="switch">
+                <input id="nativePopupForceUpstreamStream" type="checkbox" checked>
+                <span class="slider"></span>
+              </label>
+              <small>调用软件即使发送 stream:false，代理仍向上游请求流式生成并实时更新字幕，最后聚合为原来的非流式响应返回。</small>
+            </div>
+
             <div class="field switch-field">
               <label>鼠标穿透模式</label>
               <label class="switch">
@@ -270,7 +314,7 @@
                 <input id="nativePopupShowReasoning" type="checkbox">
                 <span class="slider"></span>
               </label>
-              <small>默认关闭，只显示“正在思考”，避免暴露 reasoning 文本。</small>
+              <small>默认关闭。开启后，无论字幕内容模式为何，推理分片都会立即流式显示；最终正文到达后会替换推理内容。</small>
             </div>
             <div class="field">
               <label for="nativePopupBackgroundOpacity">背景透明度</label>

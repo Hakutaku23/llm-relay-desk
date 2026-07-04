@@ -154,3 +154,21 @@ def test_validate_config_rejects_invalid_upstream_protocol(tmp_path: Path) -> No
     store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
     with pytest.raises(HTTPException):
         validate_config(store, {"upstream_protocol": "deepseek"})
+
+
+def test_force_reasoning_config_is_validated(tmp_path: Path) -> None:
+    store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
+    result = validate_config(
+        store,
+        {
+            "force_reasoning_enabled": True,
+            "default_reasoning_effort": "high",
+        },
+    )
+    assert result["force_reasoning_enabled"] is True
+    assert result["default_reasoning_effort"] == "high"
+
+
+def test_force_reasoning_safe_default_is_disabled() -> None:
+    assert DEFAULT_CONFIG["force_reasoning_enabled"] is False
+    assert DEFAULT_CONFIG["default_reasoning_effort"] == ""

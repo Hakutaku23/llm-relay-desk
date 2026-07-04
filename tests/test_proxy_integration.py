@@ -16,6 +16,7 @@ from llm_relay_desk.proxy.protocol import resolve_upstream_protocol
 
 class StubHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    received_payloads: list[tuple[str, dict[str, object]]] = []
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -29,6 +30,7 @@ class StubHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         length = int(self.headers.get("content-length", "0"))
         payload = json.loads(self.rfile.read(length) or b"{}")
+        type(self).received_payloads.append((self.path, payload))
         if self.path == "/v1/chat/completions":
             assert payload["messages"][0]["role"] == "system"
             if payload.get("stream"):
@@ -80,6 +82,7 @@ class StubHandler(BaseHTTPRequestHandler):
 
 @contextmanager
 def stub_server() -> Iterator[ThreadingHTTPServer]:
+    StubHandler.received_payloads = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), StubHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -189,7 +192,163 @@ def test_ollama_routes_adapt_to_openai_upstream(tmp_path: Path) -> None:
             assert generated.json()["done"] is True
 
 
+def test_native_ollama_nonstream_client_is_streamed_upstream_and_aggregated(tmp_path: Path) -> None:
+    with stub_server() as upstream:
+        app = make_app(tmp_path, upstream.server_address[1], upstream_protocol="ollama")
+        with TestClient(app) as client:
+            config = app.state.runtime.config_store.read()
+            config["native_popup_enabled"] = True
+            app.state.runtime.config_store.write(config)
+            response = client.post(
+                "/api/chat",
+                json={
+                    "model": "stub-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "stream": False,
+                },
+            )
+            assert response.status_code == 200
+            assert response.json()["message"]["content"] == "AB"
+            assert response.json()["message"]["thinking"] == "R"
+            request_id = response.headers["x-relay-request-id"]
+            assert app.state.runtime.monitor.records[request_id]["content"] == "AB"
+            assert app.state.runtime.monitor.records[request_id]["reasoning"] == "R"
+
+
+def test_nonstream_clients_receive_aggregated_responses_while_monitor_streams(tmp_path: Path) -> None:
+    with stub_server() as upstream:
+        app = make_app(tmp_path, upstream.server_address[1], upstream_protocol="openai")
+        with TestClient(app) as client:
+            config = app.state.runtime.config_store.read()
+            config["native_popup_enabled"] = True
+            app.state.runtime.config_store.write(config)
+            openai_response = client.post(
+                "/v1/chat/completions",
+                headers={"Authorization": "Bearer test-key"},
+                json={
+                    "model": "stub-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "stream": False,
+                },
+            )
+            assert openai_response.status_code == 200
+            assert openai_response.json()["choices"][0]["message"]["content"] == "A"
+            assert openai_response.json()["choices"][0]["message"]["reasoning_content"] == "R"
+            openai_id = openai_response.headers["x-relay-request-id"]
+            assert app.state.runtime.monitor.records[openai_id]["content"] == "A"
+            assert app.state.runtime.monitor.records[openai_id]["reasoning"] == "R"
+
+            native_response = client.post(
+                "/api/chat",
+                json={
+                    "model": "stub-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "stream": False,
+                },
+            )
+            assert native_response.status_code == 200
+            assert native_response.json()["message"]["content"] == "A"
+            assert native_response.json()["message"]["thinking"] == "R"
+            native_id = native_response.headers["x-relay-request-id"]
+            assert app.state.runtime.monitor.records[native_id]["content"] == "A"
+            assert app.state.runtime.monitor.records[native_id]["reasoning"] == "R"
+
+
 def test_auto_protocol_resolution() -> None:
     assert resolve_upstream_protocol({"upstream_protocol": "auto", "upstream_base_url": "http://127.0.0.1:11435/v1"}) == "ollama"
     assert resolve_upstream_protocol({"upstream_protocol": "auto", "upstream_base_url": "https://api.deepseek.com"}) == "openai"
     assert resolve_upstream_protocol({"upstream_protocol": "openai", "upstream_base_url": "http://127.0.0.1:11434"}) == "openai"
+
+
+def test_force_reasoning_is_injected_across_proxy_paths(tmp_path: Path) -> None:
+    with stub_server() as upstream:
+        app = make_app(tmp_path, upstream.server_address[1], upstream_protocol="openai")
+        config = app.state.runtime.config_store.read()
+        config.update(
+            {
+                "force_reasoning_enabled": True,
+                "default_reasoning_effort": "high",
+                "native_popup_enabled": False,
+            }
+        )
+        app.state.runtime.config_store.write(config)
+
+        with TestClient(app) as client:
+            direct = client.post(
+                "/v1/chat/completions",
+                headers={"Authorization": "Bearer test-key"},
+                json={
+                    "model": "stub-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "stream": False,
+                },
+            )
+            assert direct.status_code == 200
+            direct_payload = StubHandler.received_payloads[-1][1]
+            assert direct_payload["reasoning_effort"] == "high"
+
+            adapted = client.post(
+                "/api/chat",
+                json={
+                    "model": "stub-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "stream": True,
+                },
+            )
+            assert adapted.status_code == 200
+            adapted_payload = StubHandler.received_payloads[-1][1]
+            assert adapted_payload["reasoning_effort"] == "high"
+
+            explicit = client.post(
+                "/api/chat",
+                json={
+                    "model": "stub-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "stream": True,
+                    "think": False,
+                },
+            )
+            assert explicit.status_code == 200
+            explicit_payload = StubHandler.received_payloads[-1][1]
+            assert explicit_payload["thinking"] == {"type": "disabled"}
+            assert "reasoning_effort" not in explicit_payload
+
+
+def test_force_reasoning_is_injected_for_native_ollama(tmp_path: Path) -> None:
+    with stub_server() as upstream:
+        app = make_app(tmp_path, upstream.server_address[1], upstream_protocol="ollama")
+        config = app.state.runtime.config_store.read()
+        config.update(
+            {
+                "force_reasoning_enabled": True,
+                "default_reasoning_effort": "medium",
+                "native_popup_enabled": False,
+            }
+        )
+        app.state.runtime.config_store.write(config)
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/chat",
+                json={
+                    "model": "stub-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "stream": True,
+                },
+            )
+            assert response.status_code == 200
+            native_payload = StubHandler.received_payloads[-1][1]
+            assert native_payload["think"] == "medium"
+
+            response = client.post(
+                "/api/chat",
+                json={
+                    "model": "stub-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "stream": True,
+                    "think": False,
+                },
+            )
+            assert response.status_code == 200
+            native_payload = StubHandler.received_payloads[-1][1]
+            assert native_payload["think"] is False
