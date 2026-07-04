@@ -11,6 +11,7 @@ Thumbs.db
 data/*.tmp
 data/config.json
 data/prompts.json
+data/debug_logs/
 .pytest_cache/
 .coverage
 htmlcov/

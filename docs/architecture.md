@@ -12,6 +12,7 @@ app.py
     ├── prompts            提示词配置与注入
     ├── config             配置校验
     ├── storage            原子 JSON 持久化
+    ├── debug_logging.py    请求/响应调试日志旁路
     ├── runtime.py         运行期依赖聚合
     └── settings.py        路径、环境变量和默认值
 ```
@@ -81,3 +82,16 @@ Windows 下 `desktop/layered_renderer.py` 使用 Pillow 生成 RGBA 位图，再
 当调用方请求 `stream:false` 且开启字幕内部流式时，代理将上游请求改为流式并实时发布监视事件，随后聚合为调用方原协议的非流式响应。该逻辑分别位于 OpenAI 转发、Ollama 原生转发和 Ollama→OpenAI 适配模块中。
 
 - `proxy/reasoning.py`：统一处理调用方思考参数检测与代理默认思考注入。
+
+
+## 调试日志旁路
+
+`DebugLogManager` 由 `Runtime` 持有，代理模块在最终上游请求构造完成后创建一次请求日志会话。响应字节先写入可回落到磁盘的临时缓冲区；请求结束后，SSE 与 NDJSON 被合并成完整响应对象，普通 JSON 直接解析，最后写入单个格式化 JSON 文件。日志失败、目录不可写或磁盘异常只会终止当前调试记录，不改变转发响应。
+
+```text
+client request ──▶ request transform ──▶ upstream
+                         │                 │
+                         └─ request log    └─ response chunks log
+```
+
+日志是观察旁路，不参与监视事件、字幕提取和协议转换。敏感认证头与常见密钥字段在写盘前固定脱敏；模型输入输出本身完整保留。保留数量清理由请求结束后执行，并且不会删除仍以 `.tmp` 写入的活动日志。

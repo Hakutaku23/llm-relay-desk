@@ -108,6 +108,9 @@ async function loadConfig() {
   $("forceReasoningEnabled").checked = Boolean(state.config.force_reasoning_enabled);
   $("defaultReasoningEffort").value = state.config.default_reasoning_effort || "";
   $("requestTimeout").value = state.config.request_timeout_seconds || 600;
+  $("debugLoggingEnabled").checked = Boolean(state.config.debug_logging_enabled);
+  $("debugLogDirectory").value = state.config.debug_log_directory || "debug_logs";
+  $("debugLogRetentionFiles").value = state.config.debug_log_retention_files || 100;
   $("promptEnabled").checked = Boolean(state.config.prompt_enabled);
   $("recommendedApiKey").textContent = state.config.local_api_key || "无需密钥";
   $("recommendedModel").textContent = state.config.default_model || "--";
@@ -124,6 +127,9 @@ async function saveConfig() {
     force_reasoning_enabled: $("forceReasoningEnabled").checked,
     default_reasoning_effort: $("defaultReasoningEffort").value,
     request_timeout_seconds: Number($("requestTimeout").value),
+    debug_logging_enabled: $("debugLoggingEnabled").checked,
+    debug_log_directory: $("debugLogDirectory").value.trim() || "debug_logs",
+    debug_log_retention_files: Number($("debugLogRetentionFiles").value),
     prompt_enabled: $("promptEnabled").checked,
   };
 
@@ -142,6 +148,26 @@ async function saveConfig() {
     toast(error.message, true);
   } finally {
     $("saveConfigBtn").disabled = false;
+  }
+}
+
+
+async function loadDebugLogStatus() {
+  const status = await request("/admin/debug-logs");
+  $("debugLogStatus").textContent = pretty(status);
+  return status;
+}
+
+async function clearDebugLogs() {
+  $("clearDebugLogsBtn").disabled = true;
+  try {
+    const result = await request("/admin/debug-logs", { method: "DELETE" });
+    $("debugLogStatus").textContent = pretty(result.status || result);
+    toast(`已清理 ${result.removed || 0} 个调试日志文件`);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    $("clearDebugLogsBtn").disabled = false;
   }
 }
 
@@ -783,6 +809,7 @@ async function refreshAll() {
     await Promise.all([
       loadHealth(),
       loadConfig(),
+      loadDebugLogStatus(),
       loadSubtitleFonts(),
       loadSubtitleConfig(),
       loadPrompts(),
@@ -801,6 +828,7 @@ document.querySelectorAll(".nav-item[data-tab]").forEach((button) => {
 $("refreshAllBtn").addEventListener("click", refreshAll);
 $("testUpstreamBtn").addEventListener("click", testUpstream);
 $("saveConfigBtn").addEventListener("click", saveConfig);
+$("clearDebugLogsBtn").addEventListener("click", clearDebugLogs);
 $("saveSubtitleBtn").addEventListener("click", () => {
   saveSubtitleConfig().catch(() => {});
 });

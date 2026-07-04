@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.9.1
+
+- 将调试日志从逐分片 JSONL 改为每请求一个格式化 JSON 文件。
+- OpenAI SSE 自动合并为完整 `chat.completion`，累计正文、推理内容、工具调用和结束原因。
+- Ollama NDJSON 自动合并为完整响应，按顺序拼接 `message.content`、`message.thinking`、`response` 和 `thinking`。
+- 普通 JSON 原样保存为响应对象，未知响应保存为完整文本。
+- 保留状态码、响应头、流事件数、传输分片数、响应字节数和 SHA-256，不再写入大量 `upstream_response_chunk` 行。
+- 使用可回落到磁盘的临时缓冲区累计响应，降低较大流式响应在传输期间的内存占用。
+- 日志文件扩展名改为 `.json`；状态统计、保留策略和清空操作兼容旧版 `.jsonl` 文件。
+- 配置架构保持 v10，无需迁移现有配置。
+
+## 4.9.0
+
+- 新增可选调试日志功能，默认关闭。
+- 开启后，每次实际上游请求生成一份独立 JSONL 文件。
+- 同时记录调用方原始请求、提示词注入/协议转换后的上游请求，以及上游返回的完整响应流。
+- 流式 SSE/NDJSON 按分片增量落盘，不需要在内存中缓存完整响应。
+- 日志覆盖 OpenAI、Ollama 原生、Ollama→OpenAI 适配、模型列表和嵌入请求。
+- Authorization、API Key、Cookie、密码和令牌字段固定脱敏；对话、提示词、推理与工具调用内容完整保留。
+- 新增日志目录和保留文件数设置，并提供状态查询与一键清空接口。
+- 单个请求日志以 request、upstream_response_start、upstream_response_chunk、upstream_response_end 事件组成，并记录响应字节数与 SHA-256。
+- 配置架构升级到 v10，升级后不会自动开启调试日志。
+
 ## 4.8.0
 
 - 新增“代理强制思考”开关。调用方未提供 `think`、`thinking` 或 `reasoning_effort` 时，代理可自动启用模型思考。

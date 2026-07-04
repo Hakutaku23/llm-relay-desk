@@ -86,6 +86,18 @@ async def put_config(
     return {"ok": True, "config": updated}
 
 
+@router.get("/debug-logs")
+async def debug_log_status(request: Request) -> dict[str, Any]:
+    return runtime_from_request(request).debug_logs.status()
+
+
+@router.delete("/debug-logs")
+async def clear_debug_logs(request: Request) -> dict[str, Any]:
+    runtime = runtime_from_request(request)
+    removed = await asyncio.to_thread(runtime.debug_logs.clear)
+    return {"ok": True, "removed": removed, "status": runtime.debug_logs.status()}
+
+
 @router.get("/subtitle-config")
 async def get_subtitle_config(request: Request) -> dict[str, Any]:
     return _subtitle_config(runtime_from_request(request).config_store.read())

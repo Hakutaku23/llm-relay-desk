@@ -10,11 +10,11 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-APP_VERSION = "4.8.0"
+APP_VERSION = "4.9.1"
 APP_TITLE = "LLM Relay Desk"
 APP_DESCRIPTION = "本地 LLM API 转发、提示词管理、Web 监视器与原生字幕浮层"
 
-CONFIG_SCHEMA_VERSION = 9
+CONFIG_SCHEMA_VERSION = 10
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "config_schema_version": CONFIG_SCHEMA_VERSION,
@@ -26,6 +26,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "force_reasoning_enabled": False,
     "default_reasoning_effort": "",
     "request_timeout_seconds": 600,
+    "debug_logging_enabled": False,
+    "debug_log_directory": "debug_logs",
+    "debug_log_retention_files": 100,
     "prompt_enabled": True,
     "native_popup_enabled": True,
     "native_popup_close_seconds": 30,

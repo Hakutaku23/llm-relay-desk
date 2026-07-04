@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LLM Relay Desk</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=4.3.0">
+  <link rel="stylesheet" href="/ui/styles.css?v=4.9.1">
 </head>
 <body>
   <div class="shell">
@@ -165,6 +165,34 @@
                 <input id="promptEnabled" type="checkbox">
                 <span class="slider"></span>
               </label>
+            </div>
+            <div class="field switch-field">
+              <label>调试日志</label>
+              <label class="switch">
+                <input id="debugLoggingEnabled" type="checkbox">
+                <span class="slider"></span>
+              </label>
+              <small>开启后，每个上游请求生成一份格式化 JSON，流式分片会聚合为一个完整响应。</small>
+            </div>
+            <div class="field">
+              <label for="debugLogDirectory">调试日志目录</label>
+              <input id="debugLogDirectory" placeholder="debug_logs">
+              <small>相对路径位于 DATA_DIR 下，也可填写本机绝对路径。</small>
+            </div>
+            <div class="field">
+              <label for="debugLogRetentionFiles">保留日志文件数</label>
+              <input id="debugLogRetentionFiles" type="number" min="1" max="10000">
+              <small>每个请求对应一个文件，超过数量后删除最旧文件。</small>
+            </div>
+            <div class="field span-two">
+              <div class="panel-heading compact-heading">
+                <div>
+                  <label>调试日志状态</label>
+                  <small>Authorization、API Key、Cookie 等敏感字段固定脱敏。</small>
+                </div>
+                <button class="secondary" id="clearDebugLogsBtn" type="button">清空调试日志</button>
+              </div>
+              <pre class="result compact" id="debugLogStatus">正在读取。</pre>
             </div>
           </div>
 
@@ -489,6 +517,6 @@
     </main>
   </div>
 
-  <script src="/ui/app.js?v=4.3.0"></script>
+  <script src="/ui/app.js?v=4.9.1"></script>
 </body>
 </html>

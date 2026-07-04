@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 import time
@@ -442,14 +443,33 @@ def _stream_delta_objects(value: dict[str, Any], state: _StreamState, mode: str)
     return output
 
 
-async def _forward_models(runtime: Runtime, config: dict[str, Any]) -> Response:
+async def _forward_models(runtime: Runtime, request: Request, config: dict[str, Any]) -> Response:
     url = f"{openai_upstream_base(config)}/models"
+    request_id = new_request_id()
+    headers = upstream_headers(config)
+    trace = runtime.debug_logs.start(
+        request_id=request_id,
+        request=request,
+        incoming_body=None,
+        upstream_method="GET",
+        upstream_url=url,
+        upstream_headers=headers,
+        upstream_body=None,
+    )
     try:
         async with httpx.AsyncClient(timeout=timeout_config(config), trust_env=False) as client:
-            response = await client.get(url, headers=upstream_headers(config))
+            response = await client.get(url, headers=headers)
     except httpx.RequestError as exc:
+        trace.finish(outcome="error", status_code=502, error=str(exc))
         return JSONResponse(status_code=502, content={"error": f"Cannot reach OpenAI-compatible upstream: {exc}"})
 
+    trace.response_start(response.status_code, response.headers)
+    trace.append_response(response.content)
+    trace.finish(
+        outcome="completed" if response.is_success else "upstream_error",
+        status_code=response.status_code,
+        error=error_from_body(response.content) if not response.is_success else None,
+    )
     default_model = str(config.get("default_model", ""))
     if response.is_success:
         try:
@@ -491,26 +511,47 @@ async def _forward_show(request: Request, config: dict[str, Any]) -> Response:
     )
 
 
-async def _forward_embeddings(request: Request, config: dict[str, Any], legacy: bool) -> Response:
+async def _forward_embeddings(runtime: Runtime, request: Request, config: dict[str, Any], legacy: bool) -> Response:
     try:
         native = await request.json()
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}") from exc
+    incoming_native = copy.deepcopy(native)
     model = str(native.get("model") or config.get("default_model", ""))
     input_value = native.get("prompt") if legacy else native.get("input")
     if input_value is None:
         input_value = native.get("input", native.get("prompt", ""))
     url = f"{openai_upstream_base(config)}/embeddings"
+    outbound = {"model": model, "input": input_value}
+    request_id = new_request_id()
+    headers = upstream_headers(config)
+    trace = runtime.debug_logs.start(
+        request_id=request_id,
+        request=request,
+        incoming_body=incoming_native,
+        upstream_method="POST",
+        upstream_url=url,
+        upstream_headers=headers,
+        upstream_body=outbound,
+    )
     try:
         async with httpx.AsyncClient(timeout=timeout_config(config), trust_env=False) as client:
             response = await client.post(
                 url,
-                headers=upstream_headers(config),
-                json={"model": model, "input": input_value},
+                headers=headers,
+                json=outbound,
             )
     except httpx.RequestError as exc:
+        trace.finish(outcome="error", status_code=502, error=str(exc))
         return JSONResponse(status_code=502, content={"error": f"Cannot reach OpenAI-compatible upstream: {exc}"})
     body = await response.aread()
+    trace.response_start(response.status_code, response.headers)
+    trace.append_response(body)
+    trace.finish(
+        outcome="completed" if response.is_success else "upstream_error",
+        status_code=response.status_code,
+        error=error_from_body(body) if not response.is_success else None,
+    )
     if not response.is_success:
         return _openai_error_response(body, response.status_code)
     try:
@@ -539,6 +580,7 @@ async def _collect_sse_as_nonstream_ollama(
     model: str,
     mode: str,
     started_request: float,
+    trace: Any,
 ) -> dict[str, Any]:
     decoder = _SSEDecoder()
     state = _StreamState(model)
@@ -565,6 +607,7 @@ async def _collect_sse_as_nonstream_ollama(
                 reasoning_parts.append(reasoning)
 
     async for chunk in upstream_response.aiter_raw():
+        trace.append_response(chunk)
         for data in decoder.feed(chunk):
             if not data or data == "[DONE]":
                 continue
@@ -622,6 +665,7 @@ async def _forward_chat_or_generate(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}") from exc
 
+    incoming_native = copy.deepcopy(native)
     payload = _chat_payload(runtime, native, config) if mode == "chat" else _generate_payload(runtime, native, config)
     model = str(payload["model"])
     client_stream = bool(payload.get("stream", True))
@@ -633,6 +677,16 @@ async def _forward_chat_or_generate(
     payload["stream"] = upstream_stream
     url = f"{openai_upstream_base(config)}/chat/completions"
     request_id = new_request_id()
+    headers = upstream_headers(config)
+    trace = runtime.debug_logs.start(
+        request_id=request_id,
+        request=request,
+        incoming_body=incoming_native,
+        upstream_method="POST",
+        upstream_url=url,
+        upstream_headers=headers,
+        upstream_body=payload,
+    )
     started_monitor = publish_start(
         runtime.monitor,
         request_id=request_id,
@@ -648,12 +702,13 @@ async def _forward_chat_or_generate(
         upstream_request = client.build_request(
             "POST",
             url,
-            headers=upstream_headers(config),
+            headers=headers,
             json=payload,
         )
         upstream_response = await client.send(upstream_request, stream=upstream_stream)
     except httpx.RequestError as exc:
         await client.aclose()
+        trace.finish(outcome="error", status_code=502, error=str(exc))
         publish_error(runtime.monitor, request_id, started_monitor, str(exc), 502)
         return JSONResponse(
             status_code=502,
@@ -661,6 +716,7 @@ async def _forward_chat_or_generate(
             headers={"X-Relay-Request-ID": request_id},
         )
 
+    trace.response_start(upstream_response.status_code, upstream_response.headers)
     content_type = upstream_response.headers.get("content-type", "").lower()
     if (
         force_stream
@@ -675,7 +731,9 @@ async def _forward_chat_or_generate(
                 model,
                 mode,
                 started_request,
+                trace,
             )
+            trace.finish(status_code=upstream_response.status_code)
             publish_done(runtime.monitor, request_id, started_monitor, upstream_response.status_code)
             return JSONResponse(
                 content=converted,
@@ -683,6 +741,11 @@ async def _forward_chat_or_generate(
                 headers={"X-Relay-Request-ID": request_id},
             )
         except Exception as exc:
+            trace.finish(
+                outcome="error",
+                status_code=upstream_response.status_code,
+                error=str(exc),
+            )
             publish_error(
                 runtime.monitor,
                 request_id,
@@ -697,9 +760,15 @@ async def _forward_chat_or_generate(
 
     if not upstream_stream or upstream_response.status_code >= 400 or "text/event-stream" not in content_type:
         body = await upstream_response.aread()
+        trace.append_response(body)
         status_code = upstream_response.status_code
         await upstream_response.aclose()
         await client.aclose()
+        trace.finish(
+            outcome="completed" if status_code < 400 else "upstream_error",
+            status_code=status_code,
+            error=error_from_body(body) if status_code >= 400 else None,
+        )
         if status_code >= 400:
             publish_error(runtime.monitor, request_id, started_monitor, error_from_body(body), status_code)
             response = _openai_error_response(body, status_code)
@@ -733,6 +802,7 @@ async def _forward_chat_or_generate(
         final_emitted = False
         try:
             async for chunk in upstream_response.aiter_raw():
+                trace.append_response(chunk)
                 for data in decoder.feed(chunk):
                     if data == "[DONE]":
                         state.done_seen = True
@@ -774,12 +844,23 @@ async def _forward_chat_or_generate(
             )
             yield _json_line(final)
             final_emitted = True
+            trace.finish(status_code=upstream_response.status_code)
             publish_done(runtime.monitor, request_id, started_monitor, upstream_response.status_code)
             completed = True
         except asyncio.CancelledError:
+            trace.finish(
+                outcome="cancelled",
+                status_code=upstream_response.status_code,
+                error="client disconnected",
+            )
             publish_cancelled(runtime.monitor, request_id, started_monitor, upstream_response.status_code)
             raise
         except Exception as exc:
+            trace.finish(
+                outcome="error",
+                status_code=upstream_response.status_code,
+                error=str(exc),
+            )
             publish_error(runtime.monitor, request_id, started_monitor, str(exc), upstream_response.status_code)
             if not final_emitted:
                 yield _json_line({"error": str(exc)})
@@ -814,7 +895,7 @@ async def forward_openai_as_ollama(
     config = runtime.config_store.read()
 
     if path == "/api/tags":
-        return await _forward_models(runtime, config)
+        return await _forward_models(runtime, request, config)
     if path == "/api/ps":
         return JSONResponse(content={"models": []})
     if path == "/api/version":
@@ -826,7 +907,7 @@ async def forward_openai_as_ollama(
     if path == "/api/generate":
         return await _forward_chat_or_generate(runtime, request, config, "generate")
     if path == "/api/embed":
-        return await _forward_embeddings(request, config, legacy=False)
+        return await _forward_embeddings(runtime, request, config, legacy=False)
     if path == "/api/embeddings":
-        return await _forward_embeddings(request, config, legacy=True)
+        return await _forward_embeddings(runtime, request, config, legacy=True)
     return JSONResponse(status_code=404, content={"error": f"Unsupported Ollama compatibility path: {path}"})

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 from typing import Any, AsyncIterator
 
@@ -114,11 +115,13 @@ async def forward_native_request(
     url = f"{native_upstream_root(config)}{path}"
 
     payload: dict[str, Any] | None = None
+    incoming_payload: dict[str, Any] | None = None
     if method not in {"GET", "HEAD"}:
         try:
             payload = await request.json()
         except Exception:
             payload = {}
+        incoming_payload = copy.deepcopy(payload)
 
         if inject_prompt_mode == "chat":
             messages = payload.get("messages")
@@ -146,6 +149,17 @@ async def forward_native_request(
         payload["stream"] = upstream_stream
 
     request_id = new_request_id() if monitored else ""
+    trace_request_id = request_id or new_request_id()
+    headers = upstream_headers(config)
+    trace = runtime.debug_logs.start(
+        request_id=trace_request_id,
+        request=request,
+        incoming_body=incoming_payload,
+        upstream_method=method,
+        upstream_url=url,
+        upstream_headers=headers,
+        upstream_body=payload if method not in {"GET", "HEAD"} else None,
+    )
     started = (
         publish_start(
             runtime.monitor,
@@ -166,12 +180,13 @@ async def forward_native_request(
         upstream_request = client.build_request(
             method,
             url,
-            headers=upstream_headers(config),
+            headers=headers,
             json=payload if method not in {"GET", "HEAD"} else None,
         )
         upstream_response = await client.send(upstream_request, stream=upstream_stream)
     except httpx.RequestError as exc:
         await client.aclose()
+        trace.finish(outcome="error", status_code=502, error=str(exc))
         if monitored:
             publish_error(
                 runtime.monitor,
@@ -189,6 +204,7 @@ async def forward_native_request(
             headers={"X-Relay-Request-ID": request_id} if monitored else None,
         )
 
+    trace.response_start(upstream_response.status_code, upstream_response.headers)
     content_type = upstream_response.headers.get("content-type", "").lower()
     if force_stream and upstream_response.status_code < 400:
         collector = _NativeStreamCollector(
@@ -198,8 +214,10 @@ async def forward_native_request(
         )
         try:
             async for chunk in upstream_response.aiter_raw():
+                trace.append_response(chunk)
                 collector.feed(chunk)
             converted = collector.finish()
+            trace.finish(status_code=upstream_response.status_code)
             publish_done(runtime.monitor, request_id, started, upstream_response.status_code)
             return JSONResponse(
                 content=converted,
@@ -207,6 +225,11 @@ async def forward_native_request(
                 headers={"X-Relay-Request-ID": request_id},
             )
         except Exception as exc:
+            trace.finish(
+                outcome="error",
+                status_code=upstream_response.status_code,
+                error=str(exc),
+            )
             publish_error(
                 runtime.monitor,
                 request_id,
@@ -221,12 +244,19 @@ async def forward_native_request(
 
     if not upstream_stream or upstream_response.status_code >= 400 or force_stream:
         body = await upstream_response.aread()
+        trace.append_response(body)
         status_code = upstream_response.status_code
         media_type = upstream_response.headers.get(
             "content-type", "application/json"
         ).split(";")[0]
         await upstream_response.aclose()
         await client.aclose()
+
+        trace.finish(
+            outcome="completed" if status_code < 400 else "upstream_error",
+            status_code=status_code,
+            error=error_from_body(body) if status_code >= 400 else None,
+        )
 
         if monitored:
             if status_code < 400:
@@ -259,9 +289,11 @@ async def forward_native_request(
         completed = False
         try:
             async for chunk in upstream_response.aiter_raw():
+                trace.append_response(chunk)
                 if monitored:
                     parser.feed(chunk)
                 yield chunk
+            trace.finish(status_code=upstream_response.status_code)
             if monitored:
                 parser.flush()
                 publish_done(
@@ -272,6 +304,11 @@ async def forward_native_request(
                 )
             completed = True
         except asyncio.CancelledError:
+            trace.finish(
+                outcome="cancelled",
+                status_code=upstream_response.status_code,
+                error="client disconnected",
+            )
             if monitored:
                 publish_cancelled(
                     runtime.monitor,
@@ -281,6 +318,11 @@ async def forward_native_request(
                 )
             raise
         except Exception as exc:
+            trace.finish(
+                outcome="error",
+                status_code=upstream_response.status_code,
+                error=str(exc),
+            )
             if monitored:
                 publish_error(
                     runtime.monitor,

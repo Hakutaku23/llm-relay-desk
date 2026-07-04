@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import time
 import uuid
@@ -175,17 +176,29 @@ class _OpenAIStreamCollector:
                     current["function"]["arguments"] += str(function["arguments"])
 
 
-async def list_models(runtime: Runtime) -> Response:
+async def list_models(runtime: Runtime, request: Request) -> Response:
     config = runtime.config_store.read()
     url = f"{config['upstream_base_url']}/models"
 
+    request_id = new_request_id()
+    headers = upstream_headers(config)
+    trace = runtime.debug_logs.start(
+        request_id=request_id,
+        request=request,
+        incoming_body=None,
+        upstream_method="GET",
+        upstream_url=url,
+        upstream_headers=headers,
+        upstream_body=None,
+    )
     try:
         async with httpx.AsyncClient(
             timeout=timeout_config(config),
             trust_env=False,
         ) as client:
-            response = await client.get(url, headers=upstream_headers(config))
+            response = await client.get(url, headers=headers)
     except httpx.RequestError as exc:
+        trace.finish(outcome="error", status_code=502, error=str(exc))
         return JSONResponse(
             status_code=502,
             content={
@@ -197,6 +210,12 @@ async def list_models(runtime: Runtime) -> Response:
             },
         )
 
+    trace.response_start(response.status_code, response.headers)
+    trace.append_response(response.content)
+    trace.finish(
+        outcome="completed" if response.is_success else "upstream_error",
+        status_code=response.status_code,
+    )
     return Response(
         content=response.content,
         status_code=response.status_code,
@@ -214,6 +233,7 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid JSON: {exc}") from exc
 
+    incoming_payload = copy.deepcopy(payload)
     messages = payload.get("messages")
     if not isinstance(messages, list):
         raise HTTPException(status_code=400, detail="'messages' must be a list")
@@ -232,6 +252,16 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
 
     url = f"{config['upstream_base_url']}/chat/completions"
     request_id = new_request_id()
+    headers = upstream_headers(config)
+    trace = runtime.debug_logs.start(
+        request_id=request_id,
+        request=request,
+        incoming_body=incoming_payload,
+        upstream_method="POST",
+        upstream_url=url,
+        upstream_headers=headers,
+        upstream_body=payload,
+    )
     started = publish_start(
         runtime.monitor,
         request_id=request_id,
@@ -248,12 +278,13 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
         upstream_request = client.build_request(
             "POST",
             url,
-            headers=upstream_headers(config),
+            headers=headers,
             json=payload,
         )
         upstream_response = await client.send(upstream_request, stream=upstream_stream)
     except httpx.RequestError as exc:
         await client.aclose()
+        trace.finish(outcome="error", status_code=502, error=str(exc))
         publish_error(
             runtime.monitor,
             request_id,
@@ -273,6 +304,7 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
             headers={"X-Relay-Request-ID": request_id},
         )
 
+    trace.response_start(upstream_response.status_code, upstream_response.headers)
     content_type = upstream_response.headers.get("content-type", "").lower()
     if (
         force_stream
@@ -286,6 +318,7 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
         )
         try:
             async for chunk in upstream_response.aiter_raw():
+                trace.append_response(chunk)
                 collector.feed(chunk)
             converted = collector.finish()
             if collector.error:
@@ -296,7 +329,13 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
                     collector.error,
                     502,
                 )
+                trace.finish(
+                    outcome="error",
+                    status_code=upstream_response.status_code,
+                    error=collector.error,
+                )
                 return JSONResponse(status_code=502, content={"error": {"message": collector.error}})
+            trace.finish(status_code=upstream_response.status_code)
             publish_done(runtime.monitor, request_id, started, upstream_response.status_code)
             return JSONResponse(
                 content=converted,
@@ -304,6 +343,11 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
                 headers={"X-Relay-Request-ID": request_id},
             )
         except Exception as exc:
+            trace.finish(
+                outcome="error",
+                status_code=upstream_response.status_code,
+                error=str(exc),
+            )
             publish_error(
                 runtime.monitor,
                 request_id,
@@ -318,12 +362,19 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
 
     if not upstream_stream or upstream_response.status_code >= 400 or force_stream:
         body = await upstream_response.aread()
+        trace.append_response(body)
         status_code = upstream_response.status_code
         media_type = upstream_response.headers.get(
             "content-type", "application/json"
         ).split(";")[0]
         await upstream_response.aclose()
         await client.aclose()
+
+        trace.finish(
+            outcome="completed" if status_code < 400 else "upstream_error",
+            status_code=status_code,
+            error=error_from_body(body) if status_code >= 400 else None,
+        )
 
         if status_code < 400:
             try:
@@ -355,9 +406,11 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
         completed = False
         try:
             async for chunk in upstream_response.aiter_raw():
+                trace.append_response(chunk)
                 parser.feed(chunk)
                 yield chunk
             parser.flush()
+            trace.finish(status_code=upstream_response.status_code)
             publish_done(
                 runtime.monitor,
                 request_id,
@@ -366,6 +419,11 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
             )
             completed = True
         except asyncio.CancelledError:
+            trace.finish(
+                outcome="cancelled",
+                status_code=upstream_response.status_code,
+                error="client disconnected",
+            )
             publish_cancelled(
                 runtime.monitor,
                 request_id,
@@ -374,6 +432,11 @@ async def chat_completions(runtime: Runtime, request: Request) -> Response:
             )
             raise
         except Exception as exc:
+            trace.finish(
+                outcome="error",
+                status_code=upstream_response.status_code,
+                error=str(exc),
+            )
             publish_error(
                 runtime.monitor,
                 request_id,

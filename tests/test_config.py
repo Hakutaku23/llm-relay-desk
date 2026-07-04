@@ -172,3 +172,30 @@ def test_force_reasoning_config_is_validated(tmp_path: Path) -> None:
 def test_force_reasoning_safe_default_is_disabled() -> None:
     assert DEFAULT_CONFIG["force_reasoning_enabled"] is False
     assert DEFAULT_CONFIG["default_reasoning_effort"] == ""
+
+
+def test_debug_logging_config_is_validated(tmp_path: Path) -> None:
+    store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
+    result = validate_config(
+        store,
+        {
+            "debug_logging_enabled": True,
+            "debug_log_directory": "trace-output",
+            "debug_log_retention_files": 250,
+        },
+    )
+    assert result["debug_logging_enabled"] is True
+    assert result["debug_log_directory"] == "trace-output"
+    assert result["debug_log_retention_files"] == 250
+
+
+def test_debug_logging_safe_default_is_disabled() -> None:
+    assert DEFAULT_CONFIG["debug_logging_enabled"] is False
+    assert DEFAULT_CONFIG["debug_log_directory"] == "debug_logs"
+    assert DEFAULT_CONFIG["debug_log_retention_files"] == 100
+
+
+def test_debug_log_retention_rejects_invalid_value(tmp_path: Path) -> None:
+    store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
+    with pytest.raises(HTTPException):
+        validate_config(store, {"debug_log_retention_files": 0})

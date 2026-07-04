@@ -118,6 +118,24 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
         )
     updated["default_reasoning_effort"] = reasoning
 
+    updated["debug_logging_enabled"] = bool(
+        updated.get("debug_logging_enabled", False)
+    )
+    debug_directory = str(updated.get("debug_log_directory", "debug_logs")).strip()
+    if not debug_directory:
+        debug_directory = "debug_logs"
+    if len(debug_directory) > 500 or any(ord(char) < 32 for char in debug_directory):
+        raise HTTPException(status_code=400, detail="调试日志目录无效")
+    updated["debug_log_directory"] = debug_directory
+    updated["debug_log_retention_files"] = _bounded_int(
+        updated,
+        "debug_log_retention_files",
+        100,
+        1,
+        10000,
+        "调试日志保留文件数",
+    )
+
     updated["request_timeout_seconds"] = _bounded_int(
         updated,
         "request_timeout_seconds",

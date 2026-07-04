@@ -1,5 +1,5 @@
 {
-  "config_schema_version": 9,
+  "config_schema_version": 10,
   "upstream_base_url": "http://127.0.0.1:11435/v1",
   "upstream_protocol": "auto",
   "upstream_api_key": "sk-832a62ce29804aacbe908deb3ae5a556",
@@ -8,6 +8,9 @@
   "force_reasoning_enabled": true,
   "default_reasoning_effort": "",
   "request_timeout_seconds": 600,
+  "debug_logging_enabled": true,
+  "debug_log_directory": "debug_logs",
+  "debug_log_retention_files": 100,
   "prompt_enabled": true,
   "native_popup_enabled": true,
   "native_popup_close_seconds": 15,
@@ -32,7 +35,7 @@
     "speech"
   ],
   "native_popup_plain_text_fallback": true,
-  "native_popup_force_upstream_stream": true,
+  "native_popup_force_upstream_stream": false,
   "native_popup_show_reasoning": false,
   "native_popup_click_through": true,
   "native_popup_transparent_background": false,

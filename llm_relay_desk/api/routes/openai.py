@@ -17,7 +17,7 @@ async def models(
 ) -> Response:
     runtime = runtime_from_request(request)
     verify_local_api_key(runtime, authorization)
-    return await list_models(runtime)
+    return await list_models(runtime, request)
 
 
 @router.post("/chat/completions")

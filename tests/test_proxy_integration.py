@@ -352,3 +352,67 @@ def test_force_reasoning_is_injected_for_native_ollama(tmp_path: Path) -> None:
             assert response.status_code == 200
             native_payload = StubHandler.received_payloads[-1][1]
             assert native_payload["think"] is False
+
+
+def test_debug_logging_records_outbound_request_and_complete_stream(tmp_path: Path) -> None:
+    with stub_server() as upstream:
+        app = make_app(tmp_path, upstream.server_address[1], upstream_protocol="openai")
+        config = app.state.runtime.config_store.read()
+        config.update(
+            {
+                "debug_logging_enabled": True,
+                "debug_log_directory": "debug_logs",
+                "debug_log_retention_files": 10,
+                "upstream_api_key": "upstream-secret",
+                "native_popup_enabled": False,
+            }
+        )
+        app.state.runtime.config_store.write(config)
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/chat/completions",
+                headers={"Authorization": "Bearer test-key"},
+                json={
+                    "model": "stub-model",
+                    "messages": [{"role": "user", "content": "debug me"}],
+                    "stream": True,
+                },
+            )
+            assert response.status_code == 200
+            status = client.get("/admin/debug-logs").json()
+            assert status["enabled"] is True
+            assert status["file_count"] == 1
+
+        files = list((tmp_path / "data" / "debug_logs").glob("*.json"))
+        assert len(files) == 1
+        document = json.loads(files[0].read_text(encoding="utf-8"))
+        assert document["format_version"] == 2
+        assert document["client_request"]["headers"]["authorization"] == "<redacted>"
+        assert document["upstream_request"]["headers"]["Authorization"] == "<redacted>"
+        assert document["client_request"]["body"]["messages"][0]["content"] == "debug me"
+        assert document["upstream_request"]["body"]["messages"][0]["role"] == "system"
+        upstream_response = document["upstream_response"]
+        assert upstream_response["format"] == "openai-sse"
+        assert upstream_response["stream_events"] == 2
+        assert upstream_response["stream_done_marker"] is True
+        message = upstream_response["body"]["choices"][0]["message"]
+        assert message["reasoning_content"] == "R"
+        assert message["content"] == "A"
+        assert upstream_response["outcome"] == "completed"
+        assert upstream_response["response_bytes"] > 0
+
+
+def test_debug_logs_can_be_cleared(tmp_path: Path) -> None:
+    app = make_app(tmp_path, 1, upstream_protocol="openai")
+    config = app.state.runtime.config_store.read()
+    config.update({"debug_logging_enabled": True, "debug_log_directory": "debug_logs"})
+    app.state.runtime.config_store.write(config)
+    directory = tmp_path / "data" / "debug_logs"
+    directory.mkdir(parents=True)
+    (directory / "one.json").write_text("{}\n", encoding="utf-8")
+    with TestClient(app) as client:
+        result = client.delete("/admin/debug-logs")
+        assert result.status_code == 200
+        assert result.json()["removed"] == 1
+        assert result.json()["status"]["file_count"] == 0

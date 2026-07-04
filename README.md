@@ -11,6 +11,7 @@
 - Ollama 客户端可自动适配 DeepSeek 等 OpenAI 兼容上游
 - 支持流式与非流式回复
 - 可选代理强制思考：调用方未指定时自动补充思考参数
+- 可选调试日志：完整记录转发前请求与上游原始响应流
 - 系统提示词配置集、启用、导入和导出
 - 上游地址、API Key、默认模型和超时在线配置
 - Web 实时监视器：`/monitor/`
@@ -41,6 +42,7 @@ llm_relay_desk/
 │   └── routes/             system/admin/monitor/openai/native 路由
 ├── config/                 配置规范化与校验
 ├── storage/                JSON 原子读写
+├── debug_logging.py        上游请求与完整响应调试记录
 ├── prompts/                提示词配置与请求注入
 ├── monitoring/             请求事件、内存历史和 WebSocket 广播
 ├── desktop/                原生字幕控制器、Tk 窗口与 Win32 Alpha 渲染器
@@ -174,6 +176,61 @@ Windows 下使用无标题栏工具窗口和“显示但不激活”方式，不
 
 字幕只显示 `statement`，不会显示 action、reason 或其他控制参数。若 JSON 中没有任何配置的对话字段，则该请求不会创建字幕窗口。模型直接返回普通自然语言时，可通过“普通文本作为对话显示”继续正常展示。
 
+
+
+## 4.9.1 完整响应调试日志
+
+“转发配置”中的调试日志默认关闭。开启后，每个实际上游请求生成一个独立的格式化 `.json` 文件，默认目录为：
+
+```text
+DATA_DIR/debug_logs
+```
+
+相对路径以 `DATA_DIR` 为基准，也可以配置本机绝对路径。日志结构为：
+
+```json
+{
+  "client_request": {},
+  "upstream_request": {},
+  "upstream_response": {
+    "status_code": 200,
+    "format": "openai-sse",
+    "body": {},
+    "stream_events": 225,
+    "response_bytes": 12345,
+    "response_sha256": "..."
+  }
+}
+```
+
+`client_request` 保存调用软件发给后端的原始请求；`upstream_request` 保存提示词注入、强制思考、内部流式切换和协议适配完成后，真正发送给模型的请求。
+
+上游流式响应不会再按分片写成数百条 JSONL 事件。代理会在请求期间使用临时缓冲区累计响应，超过 1 MiB 时自动回落到磁盘，并在完成后统一写入 `upstream_response.body`：
+
+- OpenAI SSE 合并为一个完整 `chat.completion`，正文、推理内容、工具调用、finish reason 和 usage 保留在最终对象中。
+- Ollama NDJSON 合并为一个完整 Ollama 响应，分片正文与 thinking 字段按顺序拼接。
+- 普通 JSON 直接保存为完整响应对象。
+- 无法识别的媒体类型保存为完整原始文本。
+
+`stream_events` 仅记录解析到的流事件数量，`transport_chunks` 记录网络传输分片数量，不再把每个分片写入独立日志行。日志还保留响应状态、响应头、总字节数和 SHA-256，便于确认内容完整性。
+
+为了避免密钥直接写入磁盘，以下内容固定替换为 `<redacted>`：
+
+- Authorization、Proxy-Authorization
+- X-API-Key、API-Key
+- Cookie、Set-Cookie
+- 请求 JSON 中的 api_key、access_token、password、secret 等字段
+
+提示词、用户消息、模型正文、推理过程、工具调用和结构化输出不会被裁剪。调试日志因此可能包含隐私或业务数据，只应在排障期间开启，并使用“清空调试日志”及时清理。
+
+管理接口：
+
+```text
+GET    /admin/debug-logs
+DELETE /admin/debug-logs
+```
+
+旧版 `.jsonl` 日志不会被转换，但状态统计、保留数量清理和一键清空仍会兼容处理。
 
 ## 4.8.0 代理强制思考
 

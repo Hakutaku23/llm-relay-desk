@@ -29,13 +29,17 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
     with TestClient(app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "4.8.0"
+        assert health.json()["version"] == "4.9.1"
         ui = client.get("/ui/")
         assert ui.status_code == 200
         assert "data-tab=\"subtitle\"" in ui.text
         assert "upstreamProtocol" in ui.text
         assert "forceReasoningEnabled" in ui.text
         assert "defaultReasoningEffort" in ui.text
+        assert "debugLoggingEnabled" in ui.text
+        assert "debugLogDirectory" in ui.text
+        assert "debugLogRetentionFiles" in ui.text
+        assert "clearDebugLogsBtn" in ui.text
         assert "nativePopupBackgroundColor" in ui.text
         assert "nativePopupClickThrough" in ui.text
         assert "nativePopupTextOpacity" in ui.text
@@ -72,6 +76,8 @@ def test_route_contract_is_preserved(tmp_path: Path) -> None:
         ("/admin/config", "GET"),
         ("/admin/config", "PUT"),
         ("/admin/subtitle-config", "GET"),
+        ("/admin/debug-logs", "GET"),
+        ("/admin/debug-logs", "DELETE"),
         ("/admin/subtitle-config", "PUT"),
         ("/admin/subtitle-fonts", "GET"),
         ("/admin/subtitle-preview.png", "POST"),
