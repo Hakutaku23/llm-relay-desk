@@ -101,6 +101,7 @@ async function loadHealth() {
 async function loadConfig() {
   state.config = await request("/admin/config");
   $("upstreamBaseUrl").value = state.config.upstream_base_url || "";
+  $("upstreamProtocol").value = state.config.upstream_protocol || "auto";
   $("upstreamApiKey").value = state.config.upstream_api_key || "";
   $("localApiKey").value = state.config.local_api_key || "";
   $("defaultModel").value = state.config.default_model || "";
@@ -114,6 +115,7 @@ async function loadConfig() {
 async function saveConfig() {
   const payload = {
     upstream_base_url: $("upstreamBaseUrl").value.trim(),
+    upstream_protocol: $("upstreamProtocol").value,
     upstream_api_key: $("upstreamApiKey").value.trim(),
     local_api_key: $("localApiKey").value.trim(),
     default_model: $("defaultModel").value.trim(),

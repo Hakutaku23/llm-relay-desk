@@ -62,3 +62,8 @@ API 主进程  ◀─ saved position  ───  字幕进程
 Windows 下 `desktop/layered_renderer.py` 使用 Pillow 生成 RGBA 位图，再通过 `UpdateLayeredWindow` 提交到无边框字幕窗口。背景和文字 Alpha 在位图中分别计算，因此背景可以完全透明，而文字仍保持独立透明度和抗锯齿边缘。
 
 渲染器只负责视觉合成，不参与请求转发、事件排序或配置持久化；失败时 `SubtitleOverlay` 自动回退到普通 Tk 控件，API 链路不受影响。定位模式会给全透明位图增加临时低 Alpha 命中区域，保证拖动操作可用。
+
+
+## 协议适配边界
+
+`proxy/native.py` 只负责选择原生转发或协议适配。`proxy/protocol.py` 解析 `auto/openai/ollama` 上游模式；`proxy/ollama_openai_adapter.py` 负责 Ollama 请求到 OpenAI 请求、OpenAI SSE 到 Ollama NDJSON 以及模型/嵌入接口的格式转换。适配层仍通过统一监视事件发布正文和推理内容，不直接依赖桌面字幕实现。

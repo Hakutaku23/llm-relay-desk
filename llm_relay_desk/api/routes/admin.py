@@ -16,7 +16,8 @@ from llm_relay_desk.desktop.controller import build_popup_config
 from llm_relay_desk.desktop.fonts import font_catalog_payload
 from llm_relay_desk.desktop.layered_renderer import compose_subtitle_image
 from llm_relay_desk.monitoring import utc_now_iso
-from llm_relay_desk.proxy.common import timeout_config, upstream_headers
+from llm_relay_desk.proxy.common import native_upstream_root, timeout_config, upstream_headers
+from llm_relay_desk.proxy.protocol import resolve_upstream_protocol
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -246,7 +247,12 @@ async def delete_prompt(request: Request, profile_name: str) -> dict[str, Any]:
 async def test_upstream(request: Request) -> JSONResponse:
     runtime = runtime_from_request(request)
     config = runtime.config_store.read()
-    url = f"{config['upstream_base_url']}/models"
+    protocol = resolve_upstream_protocol(config)
+    url = (
+        f"{native_upstream_root(config)}/api/tags"
+        if protocol == "ollama"
+        else f"{str(config['upstream_base_url']).rstrip('/')}/models"
+    )
     started = time.perf_counter()
     try:
         async with httpx.AsyncClient(
@@ -261,6 +267,7 @@ async def test_upstream(request: Request) -> JSONResponse:
                 "ok": False,
                 "message": str(exc),
                 "upstream": url,
+                "resolved_protocol": protocol,
                 "elapsed_ms": round((time.perf_counter() - started) * 1000),
             },
         )
@@ -275,6 +282,7 @@ async def test_upstream(request: Request) -> JSONResponse:
         content={
             "ok": response.is_success,
             "upstream": url,
+            "resolved_protocol": protocol,
             "upstream_status": response.status_code,
             "elapsed_ms": round((time.perf_counter() - started) * 1000),
             "response": upstream_body,

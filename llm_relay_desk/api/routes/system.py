@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 
 from llm_relay_desk.api.dependencies import runtime_from_request
 from llm_relay_desk.settings import APP_TITLE, APP_VERSION
+from llm_relay_desk.proxy.protocol import resolve_upstream_protocol
 
 router = APIRouter()
 
@@ -30,6 +31,8 @@ async def health(request: Request) -> dict[str, Any]:
         "openai_base_url": f"http://{settings.host}:{settings.port}/v1",
         "monitor_url": f"http://{settings.host}:{settings.port}/monitor/",
         "upstream": config.get("upstream_base_url"),
+        "upstream_protocol": config.get("upstream_protocol", "auto"),
+        "resolved_upstream_protocol": resolve_upstream_protocol(config),
         "model": config.get("default_model"),
         "prompt_enabled": config.get("prompt_enabled"),
         "active_prompt": active,

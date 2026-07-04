@@ -29,10 +29,11 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
     with TestClient(app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "4.5.1"
+        assert health.json()["version"] == "4.6.0"
         ui = client.get("/ui/")
         assert ui.status_code == 200
         assert "data-tab=\"subtitle\"" in ui.text
+        assert "upstreamProtocol" in ui.text
         assert "nativePopupBackgroundColor" in ui.text
         assert "nativePopupClickThrough" in ui.text
         assert "nativePopupTextOpacity" in ui.text

@@ -7,7 +7,8 @@
 ## 功能
 
 - OpenAI 兼容接口：`GET /v1/models`、`POST /v1/chat/completions`
-- Ollama 原生接口：`/api/chat`、`/api/generate`、`/api/tags` 等
+- Ollama 兼容接口：`/api/chat`、`/api/generate`、`/api/tags` 等
+- Ollama 客户端可自动适配 DeepSeek 等 OpenAI 兼容上游
 - 支持流式与非流式回复
 - 系统提示词配置集、启用、导入和导出
 - 上游地址、API Key、默认模型和超时在线配置
@@ -46,6 +47,51 @@ llm_relay_desk/
 ```
 
 模块依赖方向、扩展规范和职责边界见 [`docs/architecture.md`](docs/architecture.md)。根目录 `popup_window.py` 仅作为旧导入路径的兼容层。
+
+
+## 上游协议与 Ollama 适配
+
+“转发配置”中可以选择：
+
+- `自动识别`：本机或私网 Ollama 优先走原生 `/api/*`；公网 HTTPS 与 `/v1` 服务使用 OpenAI 兼容适配。
+- `OpenAI 兼容`：强制将本地 Ollama 路由转换到 `/models`、`/chat/completions` 和 `/embeddings`。适用于 DeepSeek、OpenAI 兼容云服务和多数推理网关。
+- `Ollama 原生`：保持原有 `/api/*` 原样转发。
+
+当客户端只能请求：
+
+```text
+GET  /api/tags
+POST /api/chat
+POST /api/generate
+```
+
+而上游只提供 OpenAI 兼容接口时，代理执行：
+
+```text
+/api/tags      → /models
+/api/chat      → /chat/completions
+/api/generate  → /chat/completions
+/api/embed     → /embeddings
+/api/embeddings → /embeddings
+```
+
+流式 `/chat/completions` SSE 会转换为 Ollama NDJSON。`content` 映射到 `message.content` 或 `response`，`reasoning_content` / `reasoning` / `thinking` 映射到 Ollama 的 `thinking` 字段。工具调用会在最终消息中转换为 Ollama `tool_calls`。
+
+对于 DeepSeek，可填写：
+
+```text
+上游 Base URL: https://api.deepseek.com
+上游协议: 自动识别 或 OpenAI 兼容
+默认模型: DeepSeek 实际可用的模型 ID
+```
+
+第三方程序仍可只配置 Ollama 地址：
+
+```text
+http://127.0.0.1:11434
+```
+
+代理会负责协议转换。
 
 ## 原生字幕浮层
 
@@ -159,13 +205,13 @@ python app.py
 2. 将 v4 压缩包内容直接覆盖到原项目根目录。
 3. 保留原有 `data/config.json`、`data/prompts.json` 和 `.env`。
 4. 重新运行 `安装依赖.bat` 或 `python -m pip install -r requirements.txt`。
-5. 启动后访问 `/health`，确认版本为 `4.5.1`。
+5. 启动后访问 `/health`，确认版本为 `4.6.0`。
 
 压缩包不包含运行期配置文件，因此不会覆盖 API Key、上游地址或提示词。旧的根目录 `popup_window.py` 会被替换为兼容层。
 
 ### 从 4.2.0 回退后升级
 
-4.5.1 继续兼容 4.2.1 的安全迁移逻辑，并会识别没有配置架构版本的旧配置，并执行一次安全迁移：`native_popup_click_through` 自动设为 `false`，保证字幕先恢复可见。确认显示正常后，可在“字幕设置”中重新开启鼠标穿透。
+4.6.0 继续兼容 4.2.1 的安全迁移逻辑，并会识别没有配置架构版本的旧配置，并执行一次安全迁移：`native_popup_click_through` 自动设为 `false`，保证字幕先恢复可见。确认显示正常后，可在“字幕设置”中重新开启鼠标穿透。
 
 ## 开发与测试
 
@@ -174,7 +220,7 @@ python -m pip install -r requirements-dev.txt
 pytest
 ```
 
-当前测试覆盖配置校验、字体解析与回退、左/中/右文字对齐、文字/背景独立透明度、每像素 Alpha 图像合成、纯色保持、阴影/描边解耦、高保真 PNG 预览、中文换行、字幕独立 API、拖动坐标持久化、单字幕窗口复用、提示词注入、路由契约、静态页面、OpenAI SSE 和 Ollama NDJSON 转发。
+当前测试覆盖上游协议识别、Ollama→OpenAI 请求/流式响应转换、配置校验、字体解析与回退、左/中/右文字对齐、文字/背景独立透明度、每像素 Alpha 图像合成、纯色保持、阴影/描边解耦、高保真 PNG 预览、中文换行、字幕独立 API、拖动坐标持久化、单字幕窗口复用、提示词注入、路由契约、静态页面、OpenAI SSE 和 Ollama NDJSON 转发。
 
 ## 页面地址
 
@@ -237,7 +283,7 @@ response
 thinking
 ```
 
-代理不会修改上游响应内容。返回头 `X-Relay-Request-ID` 可用于对应 Web 监视器中的请求。
+原生同协议转发不会修改上游响应；启用 Ollama→OpenAI 适配时会按目标协议转换请求和响应。返回头 `X-Relay-Request-ID` 可用于对应 Web 监视器中的请求。
 
 ## 数据保存
 

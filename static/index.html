@@ -110,10 +110,19 @@
           </div>
 
           <div class="form-grid two">
-            <div class="field span-two">
-              <label for="upstreamBaseUrl">上游 OpenAI Base URL</label>
+            <div class="field">
+              <label for="upstreamBaseUrl">上游 Base URL</label>
               <input id="upstreamBaseUrl" placeholder="http://127.0.0.1:11435/v1">
-              <small>填写 Base URL，不要填写完整的 /chat/completions。</small>
+              <small>不要填写完整的 /chat/completions 或 /api/chat。</small>
+            </div>
+            <div class="field">
+              <label for="upstreamProtocol">上游协议</label>
+              <select id="upstreamProtocol">
+                <option value="auto">自动识别（推荐）</option>
+                <option value="openai">OpenAI 兼容（DeepSeek 等）</option>
+                <option value="ollama">Ollama 原生</option>
+              </select>
+              <small>自动模式：本机/私网 Ollama 走原生接口，公网 HTTPS API 走 OpenAI 适配。</small>
             </div>
             <div class="field">
               <label for="upstreamApiKey">上游 API Key</label>

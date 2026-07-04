@@ -24,6 +24,8 @@ from .common import (
     upstream_headers,
 )
 from .extractors import publish_native_object
+from .ollama_openai_adapter import forward_openai_as_ollama
+from .protocol import resolve_upstream_protocol
 from .parsers import NativeNDJSONParser
 
 
@@ -36,6 +38,14 @@ async def forward_native_request(
     inject_prompt_mode: str | None = None,
 ) -> Response:
     config = runtime.config_store.read()
+    if resolve_upstream_protocol(config) == "openai":
+        return await forward_openai_as_ollama(
+            runtime,
+            request=request,
+            path=path,
+            method=method,
+            inject_prompt_mode=inject_prompt_mode,
+        )
     url = f"{native_upstream_root(config)}{path}"
 
     payload: dict[str, Any] | None = None

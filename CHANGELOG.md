@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.6.0
+
+- 新增 Ollama 客户端到 OpenAI 兼容上游的协议适配层。
+- 当调用方固定使用 `/api/chat` 时，可自动转换为上游 `/chat/completions`，支持 DeepSeek 等 OpenAI 兼容服务。
+- 将 OpenAI SSE 流转换为 Ollama NDJSON，正文映射到 `message.content`，推理内容映射到 `message.thinking`。
+- 支持非流式 `/api/chat` 与 `/api/generate` 的请求和响应转换。
+- 将 `/api/tags` 转换为 `/models`，并把模型列表封装为 Ollama 格式；上游缺少 `/models` 时回退到已配置的默认模型。
+- 为 `/api/version`、`/api/ps` 和 `/api/show` 提供远程 API 兼容响应。
+- 将 `/api/embed` 与 `/api/embeddings` 转换到 OpenAI `/embeddings`，适用于支持嵌入接口的上游。
+- 新增上游协议设置：自动识别、OpenAI 兼容、Ollama 原生。
+- 自动模式保持本机 Ollama 原生转发，公网 HTTPS API 默认使用 OpenAI 适配。
+- 映射 Ollama 的 `temperature`、`top_p`、`seed`、`stop`、`num_predict`、`format`、`think`、`tools` 等参数。
+- 流式上游意外返回普通 JSON 时自动降级转换，避免客户端收到空响应。
+- 配置架构升级到 v7，并增加协议识别、配置校验和端到端适配测试。
+
 ## 4.5.1
 
 - 修复 WebUI 颜色预览与实际桌面字幕视觉颜色不一致的问题。

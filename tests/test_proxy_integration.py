@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from llm_relay_desk.application import create_app
 from llm_relay_desk.settings import Settings
+from llm_relay_desk.proxy.protocol import resolve_upstream_protocol
 
 
 class StubHandler(BaseHTTPRequestHandler):
@@ -32,7 +33,7 @@ class StubHandler(BaseHTTPRequestHandler):
             assert payload["messages"][0]["role"] == "system"
             if payload.get("stream"):
                 chunks = [
-                    b'data: {"choices":[{"delta":{"reasoning":"R"}}]}\n\n',
+                    b'data: {"choices":[{"delta":{"reasoning_content":"R"}}]}\n\n',
                     b'data: {"choices":[{"delta":{"content":"A"}}]}\n\n',
                     b'data: [DONE]\n\n',
                 ]
@@ -90,7 +91,7 @@ def stub_server() -> Iterator[ThreadingHTTPServer]:
         thread.join(timeout=2)
 
 
-def make_app(tmp_path: Path, upstream_port: int):
+def make_app(tmp_path: Path, upstream_port: int, upstream_protocol: str = "auto"):
     project_root = Path(__file__).resolve().parents[1]
     data_dir = tmp_path / "data"
     settings = Settings(
@@ -107,6 +108,7 @@ def make_app(tmp_path: Path, upstream_port: int):
     config.update(
         {
             "upstream_base_url": f"http://127.0.0.1:{upstream_port}/v1",
+            "upstream_protocol": upstream_protocol,
             "local_api_key": "test-key",
             "native_popup_enabled": False,
         }
@@ -147,3 +149,47 @@ def test_openai_and_ollama_streaming_are_preserved(tmp_path: Path) -> None:
             native_id = native_response.headers["x-relay-request-id"]
             assert app.state.runtime.monitor.records[native_id]["reasoning"] == "R"
             assert app.state.runtime.monitor.records[native_id]["content"] == "AB"
+
+
+def test_ollama_routes_adapt_to_openai_upstream(tmp_path: Path) -> None:
+    with stub_server() as upstream:
+        app = make_app(tmp_path, upstream.server_address[1], upstream_protocol="openai")
+        with TestClient(app) as client:
+            tags = client.get("/api/tags")
+            assert tags.status_code == 200
+            assert tags.json()["models"][0]["name"] == "stub-model"
+
+            version = client.get("/api/version")
+            assert version.status_code == 200
+            assert "openai-adapter" in version.json()["version"]
+
+            chat = client.post(
+                "/api/chat",
+                json={
+                    "model": "stub-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "stream": True,
+                },
+            )
+            assert chat.status_code == 200
+            lines = [json.loads(line) for line in chat.text.splitlines() if line.strip()]
+            assert any(item.get("message", {}).get("thinking") == "R" for item in lines)
+            assert any(item.get("message", {}).get("content") == "A" for item in lines)
+            assert lines[-1]["done"] is True
+            request_id = chat.headers["x-relay-request-id"]
+            assert app.state.runtime.monitor.records[request_id]["reasoning"] == "R"
+            assert app.state.runtime.monitor.records[request_id]["content"] == "A"
+
+            generated = client.post(
+                "/api/generate",
+                json={"model": "stub-model", "prompt": "hello", "stream": False},
+            )
+            assert generated.status_code == 200
+            assert generated.json()["response"] == "A"
+            assert generated.json()["done"] is True
+
+
+def test_auto_protocol_resolution() -> None:
+    assert resolve_upstream_protocol({"upstream_protocol": "auto", "upstream_base_url": "http://127.0.0.1:11435/v1"}) == "ollama"
+    assert resolve_upstream_protocol({"upstream_protocol": "auto", "upstream_base_url": "https://api.deepseek.com"}) == "openai"
+    assert resolve_upstream_protocol({"upstream_protocol": "openai", "upstream_base_url": "http://127.0.0.1:11434"}) == "openai"

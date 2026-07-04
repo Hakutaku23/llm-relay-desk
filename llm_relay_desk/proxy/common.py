@@ -40,6 +40,10 @@ def timeout_config(config: dict[str, Any]) -> httpx.Timeout:
     )
 
 
+def openai_upstream_base(config: dict[str, Any]) -> str:
+    return str(config.get("upstream_base_url", "")).strip().rstrip("/")
+
+
 def native_upstream_root(config: dict[str, Any]) -> str:
     base = str(config.get("upstream_base_url", "")).strip().rstrip("/")
     if base.lower().endswith("/v1"):

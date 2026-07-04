@@ -10,6 +10,7 @@ from llm_relay_desk.storage import JsonStore
 
 TEXT_ALIGN_VALUES = {"left", "center", "right"}
 FONT_FAMILY_MAX_LENGTH = 120
+UPSTREAM_PROTOCOL_VALUES = {"auto", "openai", "ollama"}
 
 POPUP_POSITIONS = {
     "top_left",
@@ -93,6 +94,11 @@ def validate_config(store: JsonStore, payload: dict[str, Any]) -> dict[str, Any]
     updated["upstream_base_url"] = normalize_upstream_base_url(
         str(updated.get("upstream_base_url", ""))
     )
+    protocol = str(updated.get("upstream_protocol", "auto")).strip().lower()
+    if protocol not in UPSTREAM_PROTOCOL_VALUES:
+        raise HTTPException(status_code=400, detail="上游协议必须为 auto/openai/ollama")
+    updated["upstream_protocol"] = protocol
+
     updated["upstream_api_key"] = str(
         updated.get("upstream_api_key", "ollama")
     ).strip()

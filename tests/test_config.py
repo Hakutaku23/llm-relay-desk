@@ -142,3 +142,15 @@ def test_validate_config_rejects_invalid_alignment(tmp_path: Path) -> None:
 def test_font_defaults_are_left_aligned() -> None:
     assert DEFAULT_CONFIG["native_popup_font_family"] == "Microsoft YaHei UI"
     assert DEFAULT_CONFIG["native_popup_text_align"] == "left"
+
+
+def test_validate_config_accepts_upstream_protocol(tmp_path: Path) -> None:
+    store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
+    result = validate_config(store, {"upstream_protocol": "openai"})
+    assert result["upstream_protocol"] == "openai"
+
+
+def test_validate_config_rejects_invalid_upstream_protocol(tmp_path: Path) -> None:
+    store = JsonStore(tmp_path / "config.json", DEFAULT_CONFIG)
+    with pytest.raises(HTTPException):
+        validate_config(store, {"upstream_protocol": "deepseek"})
