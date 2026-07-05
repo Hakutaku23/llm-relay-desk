@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务隔离配置 - LLM Relay Desk</title>
+  <link rel="stylesheet" href="/ui/task-isolation.css?v=5.0.0">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">LLM Relay Desk 5.0.0</p>
+        <h1>任务隔离与提示词注入</h1>
+        <p class="subtitle">未知任务默认透传；只有明确的玩家—NPC 交互允许注入当前活动提示词。</p>
+      </div>
+      <a class="back-link" href="/ui/">返回主界面</a>
+    </header>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>允许列表开关</h2>
+          <p>关闭总开关后，所有请求均不注入玩家友好提示词。</p>
+        </div>
+        <button id="saveBtn" type="button">保存配置</button>
+      </div>
+
+      <div class="switch-grid">
+        <label class="switch-card">
+          <span>
+            <strong>玩家友好注入总开关</strong>
+            <small>仅控制任务隔离层；原有 prompt_enabled 仍是提示词系统总开关。</small>
+          </span>
+          <input id="playerFriendlyInjectionEnabled" type="checkbox">
+        </label>
+
+        <label class="switch-card">
+          <span>
+            <strong>玩家主动普通对话</strong>
+            <small>player_npc_dialogue</small>
+          </span>
+          <input id="enablePlayerInitiatedDialogue" type="checkbox">
+        </label>
+
+        <label class="switch-card">
+          <span>
+            <strong>玩家交易、命令与请求</strong>
+            <small>player_npc_action_dialogue</small>
+          </span>
+          <input id="enableActionDialogue" type="checkbox">
+        </label>
+
+        <label class="switch-card">
+          <span>
+            <strong>NPC 主动面向玩家</strong>
+            <small>npc_initiated_player_dialogue</small>
+          </span>
+          <input id="enableNpcInitiatedDialogue" type="checkbox">
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>分类规则</h2>
+      <div class="rule-grid">
+        <article>
+          <h3>允许注入</h3>
+          <code>player_npc_dialogue</code>
+          <code>player_npc_action_dialogue</code>
+          <code>npc_initiated_player_dialogue</code>
+        </article>
+        <article>
+          <h3>强制透传</h3>
+          <p>外交、战争与联盟决策、动态事件、世界状态、NPC-NPC 对话、角色生成、记忆处理、图像提示词、路由分类、系统检查及 unknown。</p>
+        </article>
+      </div>
+      <p class="hint">调用方可在 JSON 顶层传入 <code>relay_task_type</code>，或使用请求头 <code>X-Relay-Task-Type</code>。显式类型优先。</p>
+    </section>
+
+    <pre id="result" class="result">正在读取配置……</pre>
+  </main>
+  <script src="/ui/task-isolation.js?v=5.0.0"></script>
+</body>
+</html>

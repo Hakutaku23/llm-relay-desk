@@ -1,11 +1,28 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Mapping
 
 from fastapi import HTTPException
 
 from llm_relay_desk.storage import JsonStore
+
+from .context import (
+    current_relay_request_context,
+    set_current_injection_decision,
+)
+from .task_isolation import (
+    ALLOWED_TASK_TYPES,
+    PROFILE_ID,
+    PROFILE_MARKER,
+    PROFILE_VERSION,
+    InjectionDecision,
+    MessageInjectionResult,
+    TaskType,
+    classify_task,
+    strip_relay_metadata,
+    system_hash,
+)
 
 
 class PromptService:
@@ -40,6 +57,13 @@ class PromptService:
             "active": data.get("active"),
             "profiles": profiles,
             "names": sorted(profiles.keys()),
+            "task_isolation": {
+                "profile_id": PROFILE_ID,
+                "profile_version": PROFILE_VERSION,
+                "allowed_task_types": sorted(item.value for item in ALLOWED_TASK_TYPES),
+                "deduplication_marker": PROFILE_MARKER,
+                "unknown_default": "passthrough",
+            },
         }
 
     def save(self, profile_name: str, content: str) -> dict[str, Any]:
@@ -77,29 +101,163 @@ class PromptService:
         self.store.write(data)
         return {"ok": True, "active": data.get("active")}
 
+    @staticmethod
+    def _config_flag(
+        config: Mapping[str, Any],
+        key: str,
+        default: bool = True,
+    ) -> bool:
+        value = config.get(key, default)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"0", "false", "no", "off", "disabled"}:
+                return False
+            if normalized in {"1", "true", "yes", "on", "enabled"}:
+                return True
+        return bool(value)
+
+    @classmethod
+    def _task_switch_enabled(cls, task_type: TaskType, config: Mapping[str, Any]) -> bool:
+        switches = {
+            TaskType.PLAYER_NPC_DIALOGUE: "enable_player_initiated_dialogue",
+            TaskType.PLAYER_NPC_ACTION_DIALOGUE: "enable_action_dialogue",
+            TaskType.NPC_INITIATED_PLAYER_DIALOGUE: "enable_npc_initiated_dialogue",
+        }
+        key = switches.get(task_type)
+        return cls._config_flag(config, key, True) if key else False
+
+    def prepare_messages(
+        self,
+        messages: list[dict[str, Any]],
+        config: dict[str, Any],
+        *,
+        payload: dict[str, Any] | None = None,
+        headers: Mapping[str, Any] | None = None,
+        endpoint: str = "",
+    ) -> MessageInjectionResult:
+        original = [dict(item) for item in messages]
+        original_hash = system_hash(original)
+        classification = classify_task(
+            messages=original,
+            payload=payload,
+            headers=headers,
+            endpoint=endpoint,
+        )
+        if payload is not None:
+            strip_relay_metadata(payload)
+
+        active_name, prompt = self.get_active()
+        global_enabled = self._config_flag(config, "prompt_enabled", True) and self._config_flag(
+            config,
+            "player_friendly_injection_enabled",
+            True,
+        )
+        allowed = classification.task_type in ALLOWED_TASK_TYPES
+        task_switch = self._task_switch_enabled(classification.task_type, config)
+        has_prompt = bool(prompt.strip())
+        deduplicated = any(
+            PROFILE_MARKER in str(item.get("content", ""))
+            for item in original
+            if isinstance(item, dict)
+        )
+        inject = global_enabled and allowed and task_switch and has_prompt and not deduplicated
+
+        if inject:
+            final_messages = [
+                {
+                    "role": "system",
+                    "content": f"{PROFILE_MARKER}\n{prompt.strip()}",
+                },
+                *original,
+            ]
+            reason = "allowed_task_type"
+        else:
+            final_messages = original
+            if deduplicated:
+                reason = "deduplicated"
+            elif not global_enabled:
+                reason = "global_switch_disabled"
+            elif not allowed:
+                reason = "task_type_not_allowed"
+            elif not task_switch:
+                reason = "task_switch_disabled"
+            elif not has_prompt:
+                reason = "empty_active_prompt"
+            else:
+                reason = "passthrough"
+
+        decision = InjectionDecision(
+            task_type=classification.task_type,
+            classification_source=classification.source,
+            classification_confidence=classification.confidence,
+            matched_positive_markers=classification.matched_positive_markers,
+            matched_negative_markers=classification.matched_negative_markers,
+            selected_profile=PROFILE_ID if inject or deduplicated else "passthrough",
+            profile_version=PROFILE_VERSION if inject or deduplicated else None,
+            active_prompt_name=active_name,
+            injection_enabled=inject,
+            injection_deduplicated=deduplicated,
+            original_system_hash=original_hash,
+            final_system_hash=system_hash(final_messages),
+            reason=reason,
+            explicit_value_invalid=classification.explicit_value_invalid,
+        )
+        set_current_injection_decision(decision)
+        return MessageInjectionResult(final_messages, decision)
+
+    def prepare_generate_system(
+        self,
+        payload: dict[str, Any],
+        config: dict[str, Any],
+        *,
+        headers: Mapping[str, Any] | None = None,
+        endpoint: str = "/api/generate",
+    ) -> InjectionDecision:
+        existing_system = str(payload.get("system", "")).strip()
+        synthetic_messages: list[dict[str, Any]] = []
+        if existing_system:
+            synthetic_messages.append({"role": "system", "content": existing_system})
+        synthetic_messages.append({"role": "user", "content": str(payload.get("prompt", ""))})
+        result = self.prepare_messages(
+            synthetic_messages,
+            config,
+            payload=payload,
+            headers=headers,
+            endpoint=endpoint,
+        )
+        if result.decision.injection_enabled:
+            injected_system = str(result.messages[0].get("content", ""))
+            payload["system"] = (
+                f"{injected_system}\n\n{existing_system}" if existing_system else injected_system
+            )
+        return result.decision
+
+    # Backward-compatible entry points used by the existing proxy modules.
+    # Request metadata is supplied through a request-local ContextVar bound by
+    # the API routes, avoiding invasive changes to the three proxy pipelines.
     def inject_messages(
         self,
         messages: list[dict[str, Any]],
         config: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        if not config.get("prompt_enabled", True):
-            return messages
-        _, prompt = self.get_active()
-        if not prompt.strip():
-            return messages
-        return [{"role": "system", "content": prompt}, *messages]
+        context = current_relay_request_context()
+        return self.prepare_messages(
+            messages,
+            config,
+            payload=context.payload if context is not None else None,
+            headers=context.headers if context is not None else None,
+            endpoint=context.endpoint if context is not None else "",
+        ).messages
 
     def inject_generate_system(
         self,
         payload: dict[str, Any],
         config: dict[str, Any],
-    ) -> None:
-        if not config.get("prompt_enabled", True):
-            return
-        _, prompt = self.get_active()
-        if not prompt.strip():
-            return
-        existing_system = str(payload.get("system", "")).strip()
-        payload["system"] = (
-            f"{prompt}\n\n{existing_system}" if existing_system else prompt
+    ) -> InjectionDecision:
+        context = current_relay_request_context()
+        return self.prepare_generate_system(
+            payload,
+            config,
+            headers=context.headers if context is not None else None,
+            endpoint=context.endpoint if context is not None else "/api/generate",
         )

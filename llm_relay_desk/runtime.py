@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from llm_relay_desk.debug_logging import DebugLogManager
 from llm_relay_desk.desktop import NativePopupController, SubtitleEventRouter
 from llm_relay_desk.monitoring import MonitorHub
 from llm_relay_desk.prompts import PromptService
+from llm_relay_desk.prompts.debug_logging import TaskAwareDebugLogManager
 from llm_relay_desk.settings import (
     CONFIG_SCHEMA_VERSION,
     DEFAULT_CONFIG,
@@ -24,7 +24,7 @@ class Runtime:
     popup: NativePopupController
     monitor: MonitorHub
     subtitle_router: SubtitleEventRouter
-    debug_logs: DebugLogManager
+    debug_logs: TaskAwareDebugLogManager
 
     @classmethod
     def create(cls, settings: Settings) -> "Runtime":
@@ -75,7 +75,7 @@ class Runtime:
         popup = NativePopupController(on_position_saved=save_popup_position)
         subtitle_router = SubtitleEventRouter(popup, config_store)
         monitor = MonitorHub(sinks=[subtitle_router.publish])
-        debug_logs = DebugLogManager(config_store, settings.data_dir)
+        debug_logs = TaskAwareDebugLogManager(config_store, settings.data_dir)
         return cls(
             settings=settings,
             config_store=config_store,
