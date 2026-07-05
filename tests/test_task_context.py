@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from llm_relay_desk.prompts import (
+    GLOBAL_PROFILE_MARKER,
     PROFILE_MARKER,
     PromptService,
     TaskType,
@@ -39,7 +40,28 @@ def _messages() -> list[dict[str, str]]:
     ]
 
 
-def test_backward_proxy_entry_uses_request_local_body_metadata(tmp_path: Path) -> None:
+def test_request_context_normal_mode_injects_without_task_metadata(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    payload = {"messages": [{"role": "user", "content": "hello"}]}
+    with bind_relay_request_context(
+        payload=payload,
+        headers={},
+        endpoint="/v1/chat/completions",
+    ):
+        result = service.inject_messages(
+            payload["messages"],
+            {"prompt_enabled": True, "prompt_injection_mode": "normal"},
+        )
+        decision = current_injection_decision()
+        assert decision is not None
+        assert decision.injection_enabled is True
+        assert result[0]["content"].startswith(GLOBAL_PROFILE_MARKER)
+    assert current_relay_request_context() is None
+
+
+def test_request_context_bannerlord_uses_body_task_metadata(tmp_path: Path) -> None:
     service = _service(tmp_path)
     payload = {
         "relay_task_type": "player_npc_action_dialogue",
@@ -52,7 +74,7 @@ def test_backward_proxy_entry_uses_request_local_body_metadata(tmp_path: Path) -
     ):
         result = service.inject_messages(
             payload["messages"],
-            {"prompt_enabled": True},
+            {"prompt_enabled": True, "prompt_injection_mode": "bannerlord"},
         )
         decision = current_injection_decision()
         assert decision is not None
@@ -60,11 +82,10 @@ def test_backward_proxy_entry_uses_request_local_body_metadata(tmp_path: Path) -
         assert decision.injection_enabled is True
         assert result[0]["content"].startswith(PROFILE_MARKER)
         assert "relay_task_type" not in payload
-
     assert current_relay_request_context() is None
 
 
-def test_backward_proxy_entry_uses_request_header_metadata(tmp_path: Path) -> None:
+def test_request_context_bannerlord_uses_header_task_metadata(tmp_path: Path) -> None:
     service = _service(tmp_path)
     payload = {"messages": _messages()}
     with bind_relay_request_context(
@@ -72,24 +93,12 @@ def test_backward_proxy_entry_uses_request_header_metadata(tmp_path: Path) -> No
         headers={"X-Relay-Task-Type": "diplomacy_statement"},
         endpoint="/api/chat",
     ):
-        result = service.inject_messages(payload["messages"], {"prompt_enabled": True})
+        result = service.inject_messages(
+            payload["messages"],
+            {"prompt_enabled": True, "prompt_injection_mode": "bannerlord"},
+        )
         decision = current_injection_decision()
         assert decision is not None
         assert decision.task_type is TaskType.DIPLOMACY_STATEMENT
         assert decision.injection_enabled is False
         assert result == payload["messages"]
-
-
-def test_string_false_switch_is_not_treated_as_enabled(tmp_path: Path) -> None:
-    service = _service(tmp_path)
-    result = service.prepare_messages(
-        _messages(),
-        {
-            "prompt_enabled": "true",
-            "player_friendly_injection_enabled": "false",
-        },
-        payload={"relay_task_type": "player_npc_dialogue"},
-        endpoint="/v1/chat/completions",
-    )
-    assert result.decision.injection_enabled is False
-    assert result.decision.reason == "global_switch_disabled"

@@ -13,6 +13,12 @@ from .context import (
 )
 from .task_isolation import (
     ALLOWED_TASK_TYPES,
+    GLOBAL_PROFILE_ID,
+    GLOBAL_PROFILE_MARKER,
+    GLOBAL_PROFILE_VERSION,
+    INJECTION_MODE_BANNERLORD,
+    INJECTION_MODE_NORMAL,
+    KNOWN_PROFILE_MARKERS,
     PROFILE_ID,
     PROFILE_MARKER,
     PROFILE_VERSION,
@@ -20,6 +26,7 @@ from .task_isolation import (
     MessageInjectionResult,
     TaskType,
     classify_task,
+    normalize_injection_mode,
     strip_relay_metadata,
     system_hash,
 )
@@ -60,9 +67,29 @@ class PromptService:
             "task_isolation": {
                 "profile_id": PROFILE_ID,
                 "profile_version": PROFILE_VERSION,
-                "allowed_task_types": sorted(item.value for item in ALLOWED_TASK_TYPES),
+                "allowed_task_types": sorted(
+                    item.value for item in ALLOWED_TASK_TYPES
+                ),
                 "deduplication_marker": PROFILE_MARKER,
                 "unknown_default": "passthrough",
+                "active_only_in_mode": INJECTION_MODE_BANNERLORD,
+            },
+            "injection_modes": {
+                INJECTION_MODE_NORMAL: {
+                    "profile_id": GLOBAL_PROFILE_ID,
+                    "profile_version": GLOBAL_PROFILE_VERSION,
+                    "deduplication_marker": GLOBAL_PROFILE_MARKER,
+                    "behavior": "inject_all_chat_and_generate_requests",
+                },
+                INJECTION_MODE_BANNERLORD: {
+                    "profile_id": PROFILE_ID,
+                    "profile_version": PROFILE_VERSION,
+                    "allowed_task_types": sorted(
+                        item.value for item in ALLOWED_TASK_TYPES
+                    ),
+                    "deduplication_marker": PROFILE_MARKER,
+                    "unknown_default": "passthrough",
+                },
             },
         }
 
@@ -117,7 +144,11 @@ class PromptService:
         return bool(value)
 
     @classmethod
-    def _task_switch_enabled(cls, task_type: TaskType, config: Mapping[str, Any]) -> bool:
+    def _task_switch_enabled(
+        cls,
+        task_type: TaskType,
+        config: Mapping[str, Any],
+    ) -> bool:
         switches = {
             TaskType.PLAYER_NPC_DIALOGUE: "enable_player_initiated_dialogue",
             TaskType.PLAYER_NPC_ACTION_DIALOGUE: "enable_action_dialogue",
@@ -125,6 +156,23 @@ class PromptService:
         }
         key = switches.get(task_type)
         return cls._config_flag(config, key, True) if key else False
+
+    @staticmethod
+    def _existing_profile(
+        messages: list[dict[str, Any]],
+    ) -> tuple[str, int] | None:
+        marker_profiles = {
+            PROFILE_MARKER: (PROFILE_ID, PROFILE_VERSION),
+            GLOBAL_PROFILE_MARKER: (GLOBAL_PROFILE_ID, GLOBAL_PROFILE_VERSION),
+        }
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            content = str(item.get("content", ""))
+            for marker in KNOWN_PROFILE_MARKERS:
+                if marker in content:
+                    return marker_profiles[marker]
+        return None
 
     def prepare_messages(
         self,
@@ -146,31 +194,56 @@ class PromptService:
         if payload is not None:
             strip_relay_metadata(payload)
 
+        mode = normalize_injection_mode(config.get("prompt_injection_mode"))
         active_name, prompt = self.get_active()
-        global_enabled = self._config_flag(config, "prompt_enabled", True) and self._config_flag(
-            config,
-            "player_friendly_injection_enabled",
-            True,
-        )
-        allowed = classification.task_type in ALLOWED_TASK_TYPES
-        task_switch = self._task_switch_enabled(classification.task_type, config)
+        prompt_enabled = self._config_flag(config, "prompt_enabled", True)
         has_prompt = bool(prompt.strip())
-        deduplicated = any(
-            PROFILE_MARKER in str(item.get("content", ""))
-            for item in original
-            if isinstance(item, dict)
+        existing_profile = self._existing_profile(original)
+        deduplicated = existing_profile is not None
+
+        if mode == INJECTION_MODE_NORMAL:
+            global_enabled = prompt_enabled
+            allowed = True
+            task_switch = True
+            marker = GLOBAL_PROFILE_MARKER
+            selected_profile = GLOBAL_PROFILE_ID
+            selected_version = GLOBAL_PROFILE_VERSION
+        else:
+            global_enabled = prompt_enabled and self._config_flag(
+                config,
+                "player_friendly_injection_enabled",
+                True,
+            )
+            allowed = classification.task_type in ALLOWED_TASK_TYPES
+            task_switch = self._task_switch_enabled(
+                classification.task_type,
+                config,
+            )
+            marker = PROFILE_MARKER
+            selected_profile = PROFILE_ID
+            selected_version = PROFILE_VERSION
+
+        inject = (
+            global_enabled
+            and allowed
+            and task_switch
+            and has_prompt
+            and not deduplicated
         )
-        inject = global_enabled and allowed and task_switch and has_prompt and not deduplicated
 
         if inject:
             final_messages = [
                 {
                     "role": "system",
-                    "content": f"{PROFILE_MARKER}\n{prompt.strip()}",
+                    "content": f"{marker}\n{prompt.strip()}",
                 },
                 *original,
             ]
-            reason = "allowed_task_type"
+            reason = (
+                "normal_mode_global_injection"
+                if mode == INJECTION_MODE_NORMAL
+                else "bannerlord_allowed_task_type"
+            )
         else:
             final_messages = original
             if deduplicated:
@@ -190,10 +263,23 @@ class PromptService:
             task_type=classification.task_type,
             classification_source=classification.source,
             classification_confidence=classification.confidence,
+            injection_mode=mode,
             matched_positive_markers=classification.matched_positive_markers,
             matched_negative_markers=classification.matched_negative_markers,
-            selected_profile=PROFILE_ID if inject or deduplicated else "passthrough",
-            profile_version=PROFILE_VERSION if inject or deduplicated else None,
+            selected_profile=(
+                selected_profile
+                if inject
+                else existing_profile[0]
+                if existing_profile is not None
+                else "passthrough"
+            ),
+            profile_version=(
+                selected_version
+                if inject
+                else existing_profile[1]
+                if existing_profile is not None
+                else None
+            ),
             active_prompt_name=active_name,
             injection_enabled=inject,
             injection_deduplicated=deduplicated,
@@ -216,8 +302,12 @@ class PromptService:
         existing_system = str(payload.get("system", "")).strip()
         synthetic_messages: list[dict[str, Any]] = []
         if existing_system:
-            synthetic_messages.append({"role": "system", "content": existing_system})
-        synthetic_messages.append({"role": "user", "content": str(payload.get("prompt", ""))})
+            synthetic_messages.append(
+                {"role": "system", "content": existing_system}
+            )
+        synthetic_messages.append(
+            {"role": "user", "content": str(payload.get("prompt", ""))}
+        )
         result = self.prepare_messages(
             synthetic_messages,
             config,
@@ -228,13 +318,15 @@ class PromptService:
         if result.decision.injection_enabled:
             injected_system = str(result.messages[0].get("content", ""))
             payload["system"] = (
-                f"{injected_system}\n\n{existing_system}" if existing_system else injected_system
+                f"{injected_system}\n\n{existing_system}"
+                if existing_system
+                else injected_system
             )
         return result.decision
 
     # Backward-compatible entry points used by the existing proxy modules.
     # Request metadata is supplied through a request-local ContextVar bound by
-    # the API routes, avoiding invasive changes to the three proxy pipelines.
+    # the API routes, avoiding invasive changes to the proxy pipelines.
     def inject_messages(
         self,
         messages: list[dict[str, Any]],
@@ -259,5 +351,9 @@ class PromptService:
             payload,
             config,
             headers=context.headers if context is not None else None,
-            endpoint=context.endpoint if context is not None else "/api/generate",
+            endpoint=(
+                context.endpoint
+                if context is not None
+                else "/api/generate"
+            ),
         )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -24,6 +24,9 @@ class TaskType(str, Enum):
     UNKNOWN = "unknown"
 
 
+INJECTION_MODE_NORMAL = "normal"
+INJECTION_MODE_BANNERLORD = "bannerlord"
+
 ALLOWED_TASK_TYPES = frozenset(
     {
         TaskType.PLAYER_NPC_DIALOGUE,
@@ -36,21 +39,104 @@ PROFILE_ID = "player_friendly_npc"
 PROFILE_VERSION = 2
 PROFILE_MARKER = f"[LLM_RELAY_PROFILE:{PROFILE_ID}:v{PROFILE_VERSION}]"
 
+GLOBAL_PROFILE_ID = "global_prompt"
+GLOBAL_PROFILE_VERSION = 1
+GLOBAL_PROFILE_MARKER = (
+    f"[LLM_RELAY_PROFILE:{GLOBAL_PROFILE_ID}:v{GLOBAL_PROFILE_VERSION}]"
+)
+KNOWN_PROFILE_MARKERS = (PROFILE_MARKER, GLOBAL_PROFILE_MARKER)
+
 _EXPLICIT_BODY_KEYS = ("relay_task_type", "_relay_task_type")
 _EXPLICIT_HEADER_KEYS = ("x-relay-task-type", "relay-task-type")
 
 _NEGATIVE_RULES: tuple[tuple[TaskType, str, re.Pattern[str]], ...] = (
-    (TaskType.DIPLOMACY_STATEMENT, "# DIPLOMATIC STATEMENT GENERATION", re.compile(r"#\s*DIPLOMATIC\s+STATEMENT\s+GENERATION", re.I)),
-    (TaskType.DIPLOMACY_DECISION, "diplomacy decision", re.compile(r"\b(war|peace|alliance|diplomacy)\s+(decision|evaluation|analysis)\b|王国.{0,10}(战争|和平|联盟).{0,10}(决策|判断)", re.I | re.S)),
-    (TaskType.DYNAMIC_EVENT_WORLD_STATE, "WORLD STATE ANALYSIS", re.compile(r"(?:##\s*MODE\s*:\s*)?WORLD\s+STATE\s+ANALYSIS", re.I)),
-    (TaskType.DYNAMIC_EVENT_DIALOGUE_ANALYSIS, "DIALOGUE ANALYSIS", re.compile(r"(?:##\s*MODE\s*:\s*)?DIALOGUE\s+ANALYSIS|动态事件.{0,20}对话分析", re.I | re.S)),
-    (TaskType.DYNAMIC_EVENT_WORLD_STATE, "DYNAMIC EVENT GENERATION", re.compile(r"#?\s*(?:TASK\s*:\s*)?DYNAMIC\s+(?:WORLD\s+)?EVENT\s+GENERATION", re.I)),
-    (TaskType.CHARACTER_GENERATION, "CHARACTER CREATION", re.compile(r"CHARACTER\s+(?:CREATION|GENERATION)|角色.{0,8}(创建|生成|背景生成|人格生成)", re.I | re.S)),
-    (TaskType.MEMORY_PROCESSING, "MEMORY PROCESSING", re.compile(r"MEMORY\s+(?:CONSOLIDATION|EVENT|SUMMARY|PROCESSING)|记忆.{0,8}(整理|压缩|摘要|合并)", re.I | re.S)),
-    (TaskType.IMAGE_PROMPT, "IMAGE PROMPT", re.compile(r"SCENE\s+IMAGE|IMAGE\s+PROMPT|图像.{0,8}(提示词|描述|生成)", re.I | re.S)),
-    (TaskType.ROUTING_OR_CLASSIFICATION, "ROUTING/CLASSIFICATION", re.compile(r"\b(?:PROMPT\s+MODULE|ROUTING|CLASSIFICATION|JSON\s+REPAIR)\b|路由.{0,8}分类|格式修复", re.I | re.S)),
-    (TaskType.SYSTEM_UTILITY, "SYSTEM UTILITY", re.compile(r"\b(?:HEALTH\s*CHECK|MODEL\s*CHECK|PING|SYSTEM\s*CHECK)\b|健康检查|模型检查", re.I)),
-    (TaskType.NPC_TO_NPC_DIALOGUE, "NPC TO NPC", re.compile(r"NPC\s*(?:TO|[-—>]\s*)\s*NPC|NPC\s+与\s+NPC|玩家(?:仅|只是)?旁观|player\s+is\s+(?:only\s+)?observing", re.I)),
+    (
+        TaskType.DIPLOMACY_STATEMENT,
+        "# DIPLOMATIC STATEMENT GENERATION",
+        re.compile(r"#\s*DIPLOMATIC\s+STATEMENT\s+GENERATION", re.I),
+    ),
+    (
+        TaskType.DIPLOMACY_DECISION,
+        "diplomacy decision",
+        re.compile(
+            r"\b(war|peace|alliance|diplomacy)\s+(decision|evaluation|analysis)\b|"
+            r"王国.{0,10}(战争|和平|联盟).{0,10}(决策|判断)",
+            re.I | re.S,
+        ),
+    ),
+    (
+        TaskType.DYNAMIC_EVENT_WORLD_STATE,
+        "WORLD STATE ANALYSIS",
+        re.compile(r"(?:##\s*MODE\s*:\s*)?WORLD\s+STATE\s+ANALYSIS", re.I),
+    ),
+    (
+        TaskType.DYNAMIC_EVENT_DIALOGUE_ANALYSIS,
+        "DIALOGUE ANALYSIS",
+        re.compile(
+            r"(?:##\s*MODE\s*:\s*)?DIALOGUE\s+ANALYSIS|动态事件.{0,20}对话分析",
+            re.I | re.S,
+        ),
+    ),
+    (
+        TaskType.DYNAMIC_EVENT_WORLD_STATE,
+        "DYNAMIC EVENT GENERATION",
+        re.compile(
+            r"#?\s*(?:TASK\s*:\s*)?DYNAMIC\s+(?:WORLD\s+)?EVENT\s+GENERATION",
+            re.I,
+        ),
+    ),
+    (
+        TaskType.CHARACTER_GENERATION,
+        "CHARACTER CREATION",
+        re.compile(
+            r"CHARACTER\s+(?:CREATION|GENERATION)|角色.{0,8}(创建|生成|背景生成|人格生成)",
+            re.I | re.S,
+        ),
+    ),
+    (
+        TaskType.MEMORY_PROCESSING,
+        "MEMORY PROCESSING",
+        re.compile(
+            r"MEMORY\s+(?:CONSOLIDATION|EVENT|SUMMARY|PROCESSING)|"
+            r"记忆.{0,8}(整理|压缩|摘要|合并)",
+            re.I | re.S,
+        ),
+    ),
+    (
+        TaskType.IMAGE_PROMPT,
+        "IMAGE PROMPT",
+        re.compile(
+            r"SCENE\s+IMAGE|IMAGE\s+PROMPT|图像.{0,8}(提示词|描述|生成)",
+            re.I | re.S,
+        ),
+    ),
+    (
+        TaskType.ROUTING_OR_CLASSIFICATION,
+        "ROUTING/CLASSIFICATION",
+        re.compile(
+            r"\b(?:PROMPT\s+MODULE|ROUTING|CLASSIFICATION|JSON\s+REPAIR)\b|"
+            r"路由.{0,8}分类|格式修复",
+            re.I | re.S,
+        ),
+    ),
+    (
+        TaskType.SYSTEM_UTILITY,
+        "SYSTEM UTILITY",
+        re.compile(
+            r"\b(?:HEALTH\s*CHECK|MODEL\s*CHECK|PING|SYSTEM\s*CHECK)\b|"
+            r"健康检查|模型检查",
+            re.I,
+        ),
+    ),
+    (
+        TaskType.NPC_TO_NPC_DIALOGUE,
+        "NPC TO NPC",
+        re.compile(
+            r"NPC\s*(?:TO|[-—>]\s*)\s*NPC|NPC\s+与\s+NPC|"
+            r"玩家(?:仅|只是)?旁观|player\s+is\s+(?:only\s+)?observing",
+            re.I,
+        ),
+    ),
 )
 
 _ROLEPLAY_PATTERNS = (
@@ -77,13 +163,38 @@ _OUTPUT_PATTERNS = (
 )
 _ACTION_PATTERNS = (
     re.compile(r'"actions?"', re.I),
-    re.compile(r"\b(?:trade|buy|sell|follow|patrol|recruit|release|exchange|pay|command|request|task)\b", re.I),
-    re.compile(r"交易|购买|出售|跟随|前往|巡逻|招募|释放|交换|支付|命令|请求|任务协商|行动要求"),
+    re.compile(
+        r"\b(?:trade|buy|sell|follow|patrol|recruit|release|exchange|pay|"
+        r"command|request|task)\b",
+        re.I,
+    ),
+    re.compile(
+        r"交易|购买|出售|跟随|前往|巡逻|招募|释放|交换|支付|命令|请求|任务协商|行动要求"
+    ),
 )
 _NPC_INITIATED_PATTERNS = (
     re.compile(r"NPC\s+(?:initiates|approaches|reports|writes|sends|returns)", re.I),
-    re.compile(r"主动.{0,8}(接近|交谈|汇报|来信|写信|报告|提出)|向玩家汇报|玩家收到.{0,8}(信件|消息)", re.I | re.S),
+    re.compile(
+        r"主动.{0,8}(接近|交谈|汇报|来信|写信|报告|提出)|"
+        r"向玩家汇报|玩家收到.{0,8}(信件|消息)",
+        re.I | re.S,
+    ),
 )
+
+
+def normalize_injection_mode(value: Any) -> str:
+    text = str(value or "").strip().lower().replace("-", "_")
+    if text in {
+        "bannerlord",
+        "game",
+        "game_mode",
+        "mount_and_blade_2",
+        "mount_and_blade_ii",
+        "骑马与砍杀2",
+        "霸主",
+    }:
+        return INJECTION_MODE_BANNERLORD
+    return INJECTION_MODE_NORMAL
 
 
 def _normalized_task_type(value: Any) -> TaskType | None:
@@ -96,6 +207,7 @@ def _normalized_task_type(value: Any) -> TaskType | None:
         "action_dialogue": TaskType.PLAYER_NPC_ACTION_DIALOGUE,
         "npc_initiated_dialogue": TaskType.NPC_INITIATED_PLAYER_DIALOGUE,
         "world_state": TaskType.DYNAMIC_EVENT_WORLD_STATE,
+        "system_event": TaskType.DYNAMIC_EVENT_WORLD_STATE,
         "dialogue_analysis": TaskType.DYNAMIC_EVENT_DIALOGUE_ANALYSIS,
         "diplomacy": TaskType.DIPLOMACY_STATEMENT,
     }
@@ -113,8 +225,9 @@ def extract_explicit_task_type(
 ) -> tuple[TaskType | None, str | None, str | None]:
     """Return normalized task type, source and invalid raw value.
 
-    Body metadata wins over headers. Invalid explicit values are not ignored: the
-    classifier returns unknown and injection remains disabled.
+    Body metadata wins over headers. Invalid explicit values are not ignored: in
+    Bannerlord mode they safely become ``unknown`` and therefore are not injected.
+    Normal mode still injects globally because task isolation is disabled there.
     """
 
     if payload:
@@ -127,7 +240,11 @@ def extract_explicit_task_type(
         if isinstance(metadata, Mapping) and "relay_task_type" in metadata:
             raw = metadata.get("relay_task_type")
             task_type = _normalized_task_type(raw)
-            return task_type, "explicit_body:metadata.relay_task_type", None if task_type else str(raw)
+            return (
+                task_type,
+                "explicit_body:metadata.relay_task_type",
+                None if task_type else str(raw),
+            )
 
     if headers:
         lowered = {str(key).lower(): value for key, value in headers.items()}
@@ -211,6 +328,7 @@ class InjectionDecision:
     task_type: TaskType
     classification_source: str
     classification_confidence: float
+    injection_mode: str = INJECTION_MODE_NORMAL
     matched_positive_markers: tuple[str, ...] = ()
     matched_negative_markers: tuple[str, ...] = ()
     selected_profile: str = "passthrough"
@@ -225,6 +343,7 @@ class InjectionDecision:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "injection_mode": self.injection_mode,
             "detected_task_type": self.task_type.value,
             "classification_source": self.classification_source,
             "classification_confidence": self.classification_confidence,
@@ -310,7 +429,9 @@ def classify_task(
         task_type=task_type,
         source=source_name,
         confidence=0.9 if output else 0.82,
-        matched_positive_markers=tuple(dict.fromkeys((*positives, *action, *initiated))),
+        matched_positive_markers=tuple(
+            dict.fromkeys((*positives, *action, *initiated))
+        ),
     )
 
 

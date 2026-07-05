@@ -7,6 +7,11 @@ from .context import (
 from .service import PromptService
 from .task_isolation import (
     ALLOWED_TASK_TYPES,
+    GLOBAL_PROFILE_ID,
+    GLOBAL_PROFILE_MARKER,
+    GLOBAL_PROFILE_VERSION,
+    INJECTION_MODE_BANNERLORD,
+    INJECTION_MODE_NORMAL,
     PROFILE_ID,
     PROFILE_MARKER,
     PROFILE_VERSION,
@@ -14,10 +19,16 @@ from .task_isolation import (
     MessageInjectionResult,
     TaskType,
     classify_task,
+    normalize_injection_mode,
 )
 
 __all__ = [
     "ALLOWED_TASK_TYPES",
+    "GLOBAL_PROFILE_ID",
+    "GLOBAL_PROFILE_MARKER",
+    "GLOBAL_PROFILE_VERSION",
+    "INJECTION_MODE_BANNERLORD",
+    "INJECTION_MODE_NORMAL",
     "PROFILE_ID",
     "PROFILE_MARKER",
     "PROFILE_VERSION",
@@ -30,4 +41,5 @@ __all__ = [
     "classify_task",
     "current_injection_decision",
     "current_relay_request_context",
+    "normalize_injection_mode",
 ]

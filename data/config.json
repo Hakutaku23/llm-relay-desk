@@ -1,5 +1,5 @@
 {
-  "config_schema_version": 11,
+  "config_schema_version": 12,
   "upstream_base_url": "http://127.0.0.1:11435/v1",
   "upstream_protocol": "auto",
   "upstream_api_key": "sk-832a62ce29804aacbe908deb3ae5a556",
@@ -12,6 +12,7 @@
   "debug_log_directory": "debug_logs",
   "debug_log_retention_files": 100,
   "prompt_enabled": true,
+  "prompt_injection_mode": "bannerlord",
   "player_friendly_injection_enabled": true,
   "enable_player_initiated_dialogue": true,
   "enable_npc_initiated_dialogue": true,
