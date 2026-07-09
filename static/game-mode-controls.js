@@ -6,6 +6,7 @@
   const MODE_BANNERLORD = "bannerlord";
   const TASK_NPC = "player_npc_dialogue";
   const TASK_SYSTEM_EVENT = "dynamic_event_world_state";
+  const PROTOCOL_VLLM = "vllm";
 
   let selectedMode = MODE_NORMAL;
   let selectedTestTask = TASK_NPC;
@@ -111,9 +112,14 @@
       selectedMode = config.prompt_injection_mode === MODE_BANNERLORD
         ? MODE_BANNERLORD
         : MODE_NORMAL;
+      const protocol = byId("upstreamProtocol");
+      if (protocol && config.upstream_protocol === PROTOCOL_VLLM) {
+        protocol.value = PROTOCOL_VLLM;
+      }
       updateModeUi();
+      updateVllmProtocolUi();
     } catch (error) {
-      notify(`读取运行模式失败：${error.message}`, true);
+      notify(`读取运行模式或上游协议失败：${error.message}`, true);
     }
   }
 
@@ -124,6 +130,46 @@
     button.textContent = text;
     button.dataset[dataName] = dataValue;
     return button;
+  }
+
+  function updateVllmProtocolUi() {
+    const protocol = byId("upstreamProtocol");
+    const hint = byId("vllmProtocolHint");
+    const baseUrl = byId("upstreamBaseUrl");
+    if (!protocol || !hint) return;
+
+    const enabled = protocol.value === PROTOCOL_VLLM;
+    hint.hidden = !enabled;
+    if (baseUrl) {
+      baseUrl.placeholder = enabled
+        ? "http://127.0.0.1:8000/v1"
+        : "http://127.0.0.1:11435/v1";
+    }
+  }
+
+  function injectVllmProtocolControl() {
+    const protocol = byId("upstreamProtocol");
+    if (!protocol) return;
+
+    if (!protocol.querySelector('option[value="vllm"]')) {
+      const option = document.createElement("option");
+      option.value = PROTOCOL_VLLM;
+      option.textContent = "vLLM（OpenAI 兼容）";
+      const ollamaOption = protocol.querySelector('option[value="ollama"]');
+      protocol.insertBefore(option, ollamaOption || null);
+    }
+
+    const field = protocol.closest(".field");
+    if (field && !byId("vllmProtocolHint")) {
+      const hint = document.createElement("small");
+      hint.id = "vllmProtocolHint";
+      hint.hidden = true;
+      hint.innerHTML = "vLLM 使用 OpenAI 兼容接口。Base URL 建议填写 <code>http://127.0.0.1:8000/v1</code>；仅当 vLLM 以 <code>--api-key</code> 启动时才需要填写上游 API Key。";
+      field.appendChild(hint);
+    }
+
+    protocol.addEventListener("change", updateVllmProtocolUi);
+    updateVllmProtocolUi();
   }
 
   function injectConfigModeControls() {
@@ -232,6 +278,7 @@
   }
 
   async function init() {
+    injectVllmProtocolControl();
     injectConfigModeControls();
     injectTestTaskControls();
     installTestRequestInterceptor();

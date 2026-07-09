@@ -1,0 +1,44 @@
+services:
+  ollama:
+    image: docker.m.daocloud.io/ollama/ollama:latest
+    container_name: ollama_Y
+    restart: unless-stopped
+
+    ports:
+      - "${OLLAMA_BIND_ADDRESS:-0.0.0.0}:11434:11434"
+
+    volumes:
+      - /mnt/vol1/ollama_Y:/root/.ollama
+
+    environment:
+      OLLAMA_HOST: "0.0.0.0:11434"
+      OLLAMA_NO_CLOUD: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: "10m"
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_KV_CACHE_TYPE: "q8_0"
+      OLLAMA_CONTEXT_LENGTH: "262144"
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids:
+                - "${OLLAMA_GPU_ID}"
+              capabilities:
+                - gpu
+
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"

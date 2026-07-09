@@ -24,12 +24,12 @@ from llm_relay_desk.settings import (
 )
 
 _MODE_CONTROL_SCRIPT = (
-    '<script src="/ui/game-mode-controls.js?v=5.1.0"></script>'
+    '<script src="/ui/game-mode-controls.js?v=5.2.0"></script>'
 )
 
 
 def inject_mode_control_script(html: str) -> str:
-    """Inject the v5.1 mode controls without replacing the existing Web UI.
+    """Inject the v5.2 mode/protocol controls without replacing the existing Web UI.
 
     Keeping this as a separate script avoids copying and maintaining the large
     ``static/index.html`` and ``static/app.js`` files. Repeated injection is

@@ -4,7 +4,7 @@ import ipaddress
 from typing import Any
 from urllib.parse import urlparse
 
-UPSTREAM_PROTOCOL_VALUES = {"auto", "openai", "ollama"}
+UPSTREAM_PROTOCOL_VALUES = {"auto", "openai", "ollama", "vllm"}
 
 
 def configured_upstream_protocol(config: dict[str, Any]) -> str:
@@ -13,14 +13,16 @@ def configured_upstream_protocol(config: dict[str, Any]) -> str:
 
 
 def resolve_upstream_protocol(config: dict[str, Any]) -> str:
-    """Resolve which upstream protocol should serve local `/api/*` routes.
+    """Resolve the transport used by local ``/api/*`` compatibility routes.
 
-    Explicit configuration always wins. The automatic mode intentionally keeps
-    loopback/private Ollama deployments on native forwarding while treating
-    public HTTPS APIs and `/v1` endpoints as OpenAI-compatible services.
+    vLLM exposes OpenAI-compatible endpoints.  The explicit ``vllm`` setting is
+    therefore routed through the existing OpenAI adapter while remaining a
+    distinct saved configuration value in the management UI.
     """
 
     configured = configured_upstream_protocol(config)
+    if configured == "vllm":
+        return "openai"
     if configured != "auto":
         return configured
 
@@ -28,6 +30,11 @@ def resolve_upstream_protocol(config: dict[str, Any]) -> str:
     parsed = urlparse(base)
     hostname = (parsed.hostname or "").strip().lower()
     path = parsed.path.rstrip("/").lower()
+
+    # A /v1 base is an explicit OpenAI-compatible signal, including local vLLM
+    # servers such as http://127.0.0.1:8000/v1.
+    if path.endswith("/v1"):
+        return "openai"
 
     if hostname in {"localhost", "127.0.0.1", "::1"}:
         return "ollama"
@@ -38,11 +45,8 @@ def resolve_upstream_protocol(config: dict[str, Any]) -> str:
         address = None
 
     if address is not None and (address.is_loopback or address.is_private):
-        if not path.endswith("/v1"):
-            return "ollama"
+        return "ollama"
 
-    if path.endswith("/v1"):
-        return "openai"
     if parsed.scheme.lower() == "https":
         return "openai"
     if parsed.port in {11434, 11435}:
