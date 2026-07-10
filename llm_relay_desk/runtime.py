@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from llm_relay_desk.desktop import NativePopupController, SubtitleEventRouter
+from llm_relay_desk.desktop.reasoning_stream_patch import (
+    install_reasoning_stream_patch,
+)
 from llm_relay_desk.monitoring import MonitorHub
 from llm_relay_desk.prompts import PromptService
 from llm_relay_desk.prompts.debug_logging import TaskAwareDebugLogManager
@@ -40,23 +43,27 @@ class Runtime:
 
         merged_config = {**DEFAULT_CONFIG, **existing_config}
         if schema_version < 2:
-            # 4.2.0 enabled pass-through by default and applied the native style
-            # before the Tk window completed its first paint. Reset it once so
-            # upgrades always recover a visible, interactive subtitle surface.
             merged_config["native_popup_click_through"] = False
         if schema_version < 4:
-            # Split the old whole-window opacity into independent channels. Text
-            # starts fully opaque; the old alpha becomes the background alpha.
             try:
-                legacy_opacity = float(existing_config.get("native_popup_opacity", 0.88))
+                legacy_opacity = float(
+                    existing_config.get("native_popup_opacity", 0.88)
+                )
             except (TypeError, ValueError):
                 legacy_opacity = 0.88
             legacy_opacity = max(0.0, min(1.0, legacy_opacity))
-            if bool(existing_config.get("native_popup_transparent_background", False)):
+            if bool(
+                existing_config.get(
+                    "native_popup_transparent_background",
+                    False,
+                )
+            ):
                 legacy_opacity = 0.0
             merged_config["native_popup_text_opacity"] = 1.0
             merged_config["native_popup_background_opacity"] = legacy_opacity
-            merged_config["native_popup_transparent_background"] = legacy_opacity <= 0.001
+            merged_config["native_popup_transparent_background"] = (
+                legacy_opacity <= 0.001
+            )
         merged_config["config_schema_version"] = CONFIG_SCHEMA_VERSION
         if merged_config != existing_config:
             config_store.write(merged_config)
@@ -71,6 +78,11 @@ class Runtime:
                     "native_popup_offset_y": 0,
                 }
             )
+
+        # multiprocessing uses "spawn" on Windows. This installer replaces the
+        # spawn target with an importable wrapper that reapplies the subtitle
+        # method patch inside the child process.
+        install_reasoning_stream_patch()
 
         popup = NativePopupController(on_position_saved=save_popup_position)
         subtitle_router = SubtitleEventRouter(popup, config_store)

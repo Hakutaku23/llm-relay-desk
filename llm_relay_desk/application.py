@@ -15,6 +15,7 @@ from llm_relay_desk.api.routes import (
     openai_router,
     system_router,
 )
+from llm_relay_desk.reasoning_middleware import VLLMReasoningResponseMiddleware
 from llm_relay_desk.runtime import Runtime
 from llm_relay_desk.settings import (
     APP_DESCRIPTION,
@@ -74,6 +75,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+    app.add_middleware(
+        VLLMReasoningResponseMiddleware,
+        runtime=runtime,
     )
 
     app.include_router(system_router)

@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlparse
 
+from .protocol import configured_upstream_protocol
+
 _REASONING_KEYS = {"think", "thinking", "reasoning_effort"}
 _REASONING_EFFORTS = {"low", "medium", "high", "max", "xhigh"}
 
@@ -43,6 +45,25 @@ def _is_deepseek_upstream(config: dict[str, Any]) -> bool:
     return "deepseek" in hostname
 
 
+def _apply_vllm_decode_controls(
+    payload: dict[str, Any],
+    config: dict[str, Any],
+) -> None:
+    """Keep Qwen reasoning boundary tokens available to the local normalizer.
+
+    vLLM normally strips special tokens before returning ``content``. Qwen chat
+    templates may place the opening thinking token in the prompt, so without
+    the generated closing/final token the proxy cannot reliably recover the
+    boundary. These fields are vLLM-specific and are only sent when the user
+    explicitly selected the vLLM protocol.
+    """
+
+    if configured_upstream_protocol(config) != "vllm":
+        return
+    payload["skip_special_tokens"] = False
+    payload.setdefault("spaces_between_special_tokens", False)
+
+
 def apply_openai_reasoning_default(
     payload: dict[str, Any],
     config: dict[str, Any],
@@ -56,6 +77,8 @@ def apply_openai_reasoning_default(
     selected for DeepSeek, it is sent alongside ``thinking`` because recent
     compatible servers may use it to tune the reasoning budget.
     """
+
+    _apply_vllm_decode_controls(payload, config)
 
     source = caller_payload if caller_payload is not None else payload
     if not force_reasoning_enabled(config) or caller_has_reasoning_preference(source):

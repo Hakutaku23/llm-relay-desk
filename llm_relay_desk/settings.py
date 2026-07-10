@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-APP_VERSION = "5.2.0"
+APP_VERSION = "5.2.4"
 APP_TITLE = "LLM Relay Desk"
 APP_DESCRIPTION = "本地 LLM API 转发、提示词管理、Web 监视器与原生字幕浮层"
 

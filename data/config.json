@@ -2,7 +2,7 @@
   "config_schema_version": 13,
   "upstream_base_url": "http://127.0.0.1:11435/v1",
   "upstream_protocol": "auto",
-  "upstream_api_key": "sk-832a62ce29804aacbe908deb3ae5a556",
+  "upstream_api_key": "sk-vllm-0773424887e4a2cb5c92c77be28255e1e7076e6bb84ff2da",
   "local_api_key": "sk-local-ollama-change-me",
   "default_model": "qwen3.6:27b",
   "force_reasoning_enabled": false,
@@ -40,7 +40,7 @@
     "speech"
   ],
   "native_popup_plain_text_fallback": true,
-  "native_popup_force_upstream_stream": false,
+  "native_popup_force_upstream_stream": true,
   "native_popup_show_reasoning": true,
   "native_popup_click_through": true,
   "native_popup_transparent_background": false,

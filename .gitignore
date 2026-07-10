@@ -19,3 +19,5 @@ build/
 dist/
 *.egg-info/
 *.zip
+*.env.bat
+.runtime/
