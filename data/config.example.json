@@ -1,0 +1,20 @@
+{
+  "config_schema_version": 14,
+  "secret_storage_version": 1,
+  "upstream_base_url": "http://127.0.0.1:11435/v1",
+  "upstream_protocol": "auto",
+  "default_model": "qwen3.6:35b",
+  "force_reasoning_enabled": false,
+  "default_reasoning_effort": "",
+  "request_timeout_seconds": 600,
+  "debug_logging_enabled": false,
+  "debug_log_directory": "debug_logs",
+  "debug_log_retention_files": 100,
+  "prompt_enabled": true,
+  "prompt_injection_mode": "normal",
+  "player_friendly_injection_enabled": true,
+  "enable_player_initiated_dialogue": true,
+  "enable_npc_initiated_dialogue": true,
+  "enable_action_dialogue": true,
+  "native_popup_enabled": true
+}
