@@ -98,6 +98,7 @@ class Settings:
     monitor_dir: Path
     config_path: Path
     prompts_path: Path
+    frontend_dist_dir: Path = PROJECT_ROOT / "frontend" / "dist"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -110,6 +111,7 @@ class Settings:
             data_dir=data_dir,
             static_dir=PROJECT_ROOT / "static",
             monitor_dir=PROJECT_ROOT / "monitor",
+            frontend_dist_dir=PROJECT_ROOT / "frontend" / "dist",
             config_path=data_dir / "config.json",
             prompts_path=data_dir / "prompts.json",
         )

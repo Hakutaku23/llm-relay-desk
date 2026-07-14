@@ -4,9 +4,9 @@ from contextlib import asynccontextmanager
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from llm_relay_desk.api.routes import (
@@ -27,8 +27,8 @@ from llm_relay_desk.settings import (
 )
 
 _UI_SCRIPTS = (
-    '<script src="/ui/game-mode-controls.js?v=5.2.0"></script>',
-    '<script src="/ui/security-controls.js?v=5.3.0"></script>',
+    '<script src="/ui-legacy/game-mode-controls.js?v=5.2.0"></script>',
+    '<script src="/ui-legacy/security-controls.js?v=5.3.0"></script>',
 )
 
 
@@ -48,8 +48,13 @@ def inject_mode_control_script(html: str) -> str:
     return inject_ui_scripts(html)
 
 
-def _read_ui_index(path: Path) -> str:
-    return inject_ui_scripts(path.read_text(encoding="utf-8"))
+def _read_legacy_ui_index(path: Path) -> str:
+    html = path.read_text(encoding="utf-8").replace('"/ui/', '"/ui-legacy/')
+    return inject_ui_scripts(html)
+
+
+def _read_legacy_html(path: Path) -> str:
+    return path.read_text(encoding="utf-8").replace('"/ui/', '"/ui-legacy/')
 
 
 
@@ -109,16 +114,61 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(native_router)
     app.include_router(openai_router)
 
-    index_path = resolved_settings.static_dir / "index.html"
+    legacy_index_path = resolved_settings.static_dir / "index.html"
+    vue_index_path = resolved_settings.frontend_dist_dir / "index.html"
 
-    @app.get("/ui", response_class=HTMLResponse, include_in_schema=False)
-    @app.get("/ui/", response_class=HTMLResponse, include_in_schema=False)
-    @app.get("/ui/index.html", response_class=HTMLResponse, include_in_schema=False)
-    async def ui_index() -> HTMLResponse:
+    @app.get("/ui", include_in_schema=False)
+    async def ui_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/ui/")
+
+    @app.get("/ui-legacy", include_in_schema=False)
+    async def legacy_ui_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/ui-legacy/")
+
+    @app.get("/ui-legacy/", response_class=HTMLResponse, include_in_schema=False)
+    @app.get("/ui-legacy/index.html", response_class=HTMLResponse, include_in_schema=False)
+    async def legacy_ui_index() -> HTMLResponse:
         return HTMLResponse(
-            content=_read_ui_index(index_path),
+            content=_read_legacy_ui_index(legacy_index_path),
             headers={"Cache-Control": "no-cache"},
         )
+
+    @app.get(
+        "/ui-legacy/task-isolation.html",
+        response_class=HTMLResponse,
+        include_in_schema=False,
+    )
+    async def legacy_task_isolation() -> HTMLResponse:
+        return HTMLResponse(
+            content=_read_legacy_html(resolved_settings.static_dir / "task-isolation.html"),
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    def vue_index_response() -> FileResponse:
+        if not vue_index_path.is_file():
+            raise HTTPException(status_code=503, detail="Vue UI build is unavailable")
+        return FileResponse(
+            vue_index_path,
+            media_type="text/html",
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    @app.get("/ui/", include_in_schema=False)
+    @app.get("/ui/index.html", include_in_schema=False)
+    async def vue_ui_index() -> FileResponse:
+        return vue_index_response()
+
+    @app.get("/ui/{spa_path:path}", include_in_schema=False)
+    async def vue_ui_path(spa_path: str) -> FileResponse:
+        dist_root = resolved_settings.frontend_dist_dir.resolve()
+        requested = (dist_root / spa_path).resolve()
+        if not requested.is_relative_to(dist_root):
+            raise HTTPException(status_code=404, detail="Static asset not found")
+        if requested.is_file():
+            return FileResponse(requested)
+        if Path(spa_path).suffix:
+            raise HTTPException(status_code=404, detail="Static asset not found")
+        return vue_index_response()
 
     app.mount(
         "/monitor",
@@ -126,8 +176,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         name="monitor",
     )
     app.mount(
-        "/ui",
+        "/ui-legacy",
         StaticFiles(directory=resolved_settings.static_dir, html=True),
-        name="ui",
+        name="ui-legacy",
     )
     return app

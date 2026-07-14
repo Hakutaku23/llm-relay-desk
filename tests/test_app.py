@@ -6,15 +6,26 @@ from llm_relay_desk.application import create_app
 from llm_relay_desk.settings import Settings
 
 
-def make_settings(tmp_path: Path) -> Settings:
+def make_settings(tmp_path: Path, *, with_frontend: bool = True) -> Settings:
     project_root = Path(__file__).resolve().parents[1]
     data_dir = tmp_path / "data"
+    frontend_dist_dir = tmp_path / "frontend-dist"
+    if with_frontend:
+        assets_dir = frontend_dist_dir / "assets"
+        assets_dir.mkdir(parents=True)
+        (frontend_dist_dir / "index.html").write_text(
+            '<!doctype html><html><body><div id="app"></div>'
+            '<script type="module" src="/ui/assets/app.js"></script></body></html>',
+            encoding="utf-8",
+        )
+        (assets_dir / "app.js").write_text("console.log('vue-test-build')", encoding="utf-8")
     return Settings(
         host="127.0.0.1",
         port=11434,
         data_dir=data_dir,
         static_dir=project_root / "static",
         monitor_dir=project_root / "monitor",
+        frontend_dist_dir=frontend_dist_dir,
         config_path=data_dir / "config.json",
         prompts_path=data_dir / "prompts.json",
     )
@@ -29,10 +40,32 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
     with TestClient(app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "4.9.1"
+        assert health.json()["status"] == "ok"
         ui = client.get("/ui/")
         assert ui.status_code == 200
-        assert "data-tab=\"subtitle\"" in ui.text
+        assert '<div id="app"></div>' in ui.text
+        assert "game-mode-controls.js" not in ui.text
+        assert client.get("/ui/dashboard").status_code == 200
+        asset = client.get("/ui/assets/app.js")
+        assert asset.status_code == 200
+        assert "vue-test-build" in asset.text
+        assert client.get("/ui/assets/missing.js").status_code == 404
+
+        legacy = client.get("/ui-legacy/")
+        assert legacy.status_code == 200
+        assert "data-tab=\"subtitle\"" in legacy.text
+        assert "/ui-legacy/game-mode-controls.js" in legacy.text
+        assert "/ui-legacy/security-controls.js" in legacy.text
+        assert 'href="/ui-legacy/styles.css' in legacy.text
+        assert 'src="/ui-legacy/app.js' in legacy.text
+        task_isolation = client.get("/ui-legacy/task-isolation.html")
+        assert task_isolation.status_code == 200
+        assert 'href="/ui-legacy/task-isolation.css' in task_isolation.text
+        assert 'src="/ui-legacy/task-isolation.js' in task_isolation.text
+        assert 'href="/ui-legacy/"' in task_isolation.text
+        assert client.get("/ui-legacy/task-isolation.js").status_code == 200
+        assert client.get("/ui-legacy/task-isolation.css").status_code == 200
+        ui = legacy
         assert "upstreamProtocol" in ui.text
         assert "forceReasoningEnabled" in ui.text
         assert "defaultReasoningEffort" in ui.text
@@ -63,13 +96,64 @@ def test_health_and_static_routes(tmp_path: Path) -> None:
         assert isinstance(fonts.json()["fonts"], list)
 
 
+def test_spa_fallback_does_not_swallow_api_routes(tmp_path: Path) -> None:
+    app = create_app(make_settings(tmp_path))
+    config = app.state.runtime.config_store.read()
+    config["native_popup_enabled"] = False
+    app.state.runtime.config_store.write(config)
+
+    with TestClient(app) as client:
+        assert client.get("/health").headers["content-type"].startswith("application/json")
+        assert client.get("/admin/config").headers["content-type"].startswith("application/json")
+        assert client.get("/admin/not-a-route").status_code == 404
+        assert client.get("/api/not-a-route").status_code == 404
+        assert client.get("/v1/not-a-route").status_code == 404
+        assert client.get("/ws/not-a-route").status_code == 404
+        monitor = client.get("/monitor/")
+        assert monitor.status_code == 200
+        assert "requestList" in monitor.text
+        assert '<div id="app"></div>' not in monitor.text
+
+
+def test_missing_frontend_build_is_diagnostic_and_backend_remains_available(
+    tmp_path: Path,
+) -> None:
+    app = create_app(make_settings(tmp_path, with_frontend=False))
+    config = app.state.runtime.config_store.read()
+    config["native_popup_enabled"] = False
+    app.state.runtime.config_store.write(config)
+
+    with TestClient(app) as client:
+        ui = client.get("/ui/")
+        assert ui.status_code == 503
+        assert ui.json() == {"detail": "Vue UI build is unavailable"}
+        assert client.get("/ui/nested-route").status_code == 503
+        assert client.get("/ui/assets/missing.js").status_code == 404
+        assert client.get("/health").status_code == 200
+        assert client.get("/ui-legacy/").status_code == 200
+        assert client.get("/monitor/").status_code == 200
+
+
 def test_route_contract_is_preserved(tmp_path: Path) -> None:
     app = create_app(make_settings(tmp_path))
-    route_keys = {
-        (route.path, method)
-        for route in app.routes
-        for method in (getattr(route, "methods", None) or {"WEBSOCKET"})
-    }
+
+    def route_keys(routes) -> set[tuple[str, str]]:
+        keys: set[tuple[str, str]] = set()
+        for route in routes:
+            if hasattr(route, "path"):
+                keys.update(
+                    (route.path, method)
+                    for method in (getattr(route, "methods", None) or {"WEBSOCKET"})
+                )
+            nested = getattr(route, "routes", None)
+            if nested:
+                keys.update(route_keys(nested))
+            original_router = getattr(route, "original_router", None)
+            if original_router is not None:
+                keys.update(route_keys(original_router.routes))
+        return keys
+
+    actual = route_keys(app.routes)
     expected = {
         ("/health", "GET"),
         ("/ws/monitor", "WEBSOCKET"),
@@ -89,7 +173,7 @@ def test_route_contract_is_preserved(tmp_path: Path) -> None:
         ("/v1/models", "GET"),
         ("/v1/chat/completions", "POST"),
     }
-    assert expected <= route_keys
+    assert expected <= actual
 
 
 def test_subtitle_config_endpoint(tmp_path: Path) -> None:

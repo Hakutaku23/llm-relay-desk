@@ -1,0 +1,10 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": ["env.d.ts", "src/**/*.ts", "src/**/*.vue", "tests/**/*.ts"],
+  "exclude": ["tests/e2e/**"],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] },
+    "types": ["vitest/globals"]
+  }
+}
