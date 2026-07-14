@@ -1,0 +1,8 @@
+data: {"id":"chatcmpl-mock-openai-stream-001","object":"chat.completion.chunk","created":1700000000,"model":"mock/openai-stream-final-usage","choices":[{"index":0,"delta":{"role":"assistant","content":"Mock "},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-mock-openai-stream-001","object":"chat.completion.chunk","created":1700000000,"model":"mock/openai-stream-final-usage","choices":[{"index":0,"delta":{"content":"stream."},"finish_reason":"stop"}]}
+
+data: {"id":"chatcmpl-mock-openai-stream-001","object":"chat.completion.chunk","created":1700000000,"model":"mock/openai-stream-final-usage","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":4,"total_tokens":16}}
+
+data: [DONE]
+

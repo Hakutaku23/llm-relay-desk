@@ -1,0 +1,1 @@
+{"id":"chatcmpl-mock-cache-unknown-001","object":"chat.completion","created":1700000000,"model":"mock/cache-details-missing","choices":[{"index":0,"message":{"role":"assistant","content":"Mock response with unknown cache usage."},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}

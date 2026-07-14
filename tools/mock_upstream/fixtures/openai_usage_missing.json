@@ -1,0 +1,1 @@
+{"id":"chatcmpl-mock-missing-001","object":"chat.completion","created":1700000000,"model":"mock/usage-missing","choices":[{"index":0,"message":{"role":"assistant","content":"Mock response without usage."},"finish_reason":"stop"}]}

@@ -1,0 +1,3 @@
+event: message
+data: {"choices":[{"delta":{"content":"broken"}}]
+this is not valid sse framing

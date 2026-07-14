@@ -1,0 +1,6 @@
+data: {"id":"chatcmpl-mock-vllm-stream-001","object":"chat.completion.chunk","created":1700000000,"model":"mock/vllm-stream-final-usage","choices":[{"index":0,"delta":{"content":"Mock vLLM stream."},"finish_reason":"stop"}]}
+
+data: {"id":"chatcmpl-mock-vllm-stream-001","object":"chat.completion.chunk","created":1700000000,"model":"mock/vllm-stream-final-usage","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+
+data: [DONE]
+

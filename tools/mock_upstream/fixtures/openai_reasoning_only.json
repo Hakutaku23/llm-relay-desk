@@ -1,0 +1,1 @@
+{"id":"chatcmpl-mock-reasoning-001","object":"chat.completion","created":1700000000,"model":"mock/reasoning-only","choices":[{"index":0,"message":{"role":"assistant","reasoning_content":"Mock reasoning only.","content":""},"finish_reason":"stop"}]}

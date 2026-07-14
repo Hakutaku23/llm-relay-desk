@@ -1,0 +1,2 @@
+data: {"id":"chatcmpl-mock-interrupted-001","object":"chat.completion.chunk","created":1700000000,"model":"mock/interrupted-stream","choices":[{"index":0,"delta":{"content":"Partial"},"finish_reason":null}]}
+
