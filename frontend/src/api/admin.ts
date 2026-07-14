@@ -31,6 +31,7 @@ export function parseConfig(value: unknown): RelayConfig {
     debugLoggingEnabled: value.debug_logging_enabled === true,
     debugLogDirectory: typeof value.debug_log_directory === 'string' ? value.debug_log_directory : 'debug_logs',
     debugLogRetentionFiles: typeof value.debug_log_retention_files === 'number' ? value.debug_log_retention_files : 100,
+    promptInjectionMode: value.prompt_injection_mode === 'bannerlord' ? 'bannerlord' : 'normal',
   }
 }
 
@@ -47,6 +48,7 @@ function toPayload(config: RelayConfig, secrets?: Partial<Record<SecretName, str
     debug_logging_enabled: config.debugLoggingEnabled,
     debug_log_directory: config.debugLogDirectory,
     debug_log_retention_files: config.debugLogRetentionFiles,
+    prompt_injection_mode: config.promptInjectionMode,
     ...secrets,
   }
 }

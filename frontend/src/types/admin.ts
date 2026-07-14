@@ -12,6 +12,7 @@ export interface RelayConfig {
   debugLoggingEnabled: boolean
   debugLogDirectory: string
   debugLogRetentionFiles: number
+  promptInjectionMode: 'normal' | 'bannerlord'
 }
 
 export type SecretName = 'upstream_api_key' | 'local_api_key'

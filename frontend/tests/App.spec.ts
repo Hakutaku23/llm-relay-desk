@@ -75,6 +75,7 @@ describe('router shell', () => {
       '/ui/',
       '/ui/status',
       '/ui/settings',
+      '/ui/api-test',
       '/ui-legacy/',
       '/monitor/',
     ])

@@ -9,11 +9,8 @@ export default defineConfig({
     channel: 'chrome',
     trace: 'retain-on-failure',
   },
-  webServer: {
-    command: 'conda run -n ollama python app.py',
-    cwd: '..',
-    url: 'http://127.0.0.1:11434/health',
-    reuseExistingServer: false,
-    timeout: 30_000,
-  },
+  webServer: [
+    { command: 'conda run -n ollama python app.py', cwd: '..', url: 'http://127.0.0.1:11434/health', reuseExistingServer: false, timeout: 30_000 },
+    { command: 'conda run -n ollama python -m tools.mock_upstream --host 127.0.0.1 --port 18000', cwd: '..', url: 'http://127.0.0.1:18000/v1/models', reuseExistingServer: false, timeout: 30_000 },
+  ],
 })

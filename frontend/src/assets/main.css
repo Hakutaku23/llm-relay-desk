@@ -56,6 +56,14 @@ h1 { margin: 4px 0 0; font-size: 30px; letter-spacing: 0; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 .revealed-secret { display: block; padding: 10px; background: #f4f6f8; overflow-wrap: anywhere; }
 .form-message { padding: 12px; }.error-text { color: #a12626; }.success-text { color: #17613a; }
+.section-heading, .test-results > header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.section-heading h2, .test-results h2 { margin: 0; }
+.form-grid .wide { grid-column: 1 / -1; }
+.form-grid textarea { width: 100%; resize: vertical; padding: 10px; border: 1px solid #a8b3bc; }
+.test-results { padding: 22px; background: #fff; border: 1px solid #dce2e7; }
+.output-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.output-grid > div, .test-results > pre { min-width: 0; }
+.test-results pre { min-height: 90px; max-height: 340px; margin: 0; padding: 14px; overflow: auto; background: #f4f6f8; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 720px) {
   .app-frame { grid-template-columns: 1fr; }
   .sidebar { grid-template-columns: 38px 1fr; padding: 14px 16px; }
@@ -66,4 +74,5 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .app-content { padding: 24px 18px; }
   .details-list div { grid-template-columns: 1fr; gap: 5px; }
   .form-grid { grid-template-columns: 1fr; }
+  .output-grid { grid-template-columns: 1fr; }
 }

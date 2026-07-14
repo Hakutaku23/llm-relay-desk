@@ -4,10 +4,11 @@ import DashboardView from '@/views/DashboardView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import StatusView from '@/views/StatusView.vue'
+import ApiTestView from '@/views/ApiTestView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
-    titleKey?: 'routes.dashboard' | 'routes.status' | 'routes.settings' | 'routes.notFound'
+    titleKey?: 'routes.dashboard' | 'routes.status' | 'routes.settings' | 'routes.apiTest' | 'routes.notFound'
   }
 }
 
@@ -16,6 +17,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/dashboard', redirect: '/' },
   { path: '/status', name: 'status', component: StatusView, meta: { titleKey: 'routes.status' } },
   { path: '/settings', name: 'settings', component: SettingsView, meta: { titleKey: 'routes.settings' } },
+  { path: '/api-test', name: 'api-test', component: ApiTestView, meta: { titleKey: 'routes.apiTest' } },
   {
     path: '/:pathMatch(.*)*',
     name: 'not-found',

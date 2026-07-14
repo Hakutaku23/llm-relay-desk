@@ -68,3 +68,58 @@ test('status and settings use local APIs without persisting secrets', async ({ p
   expect(JSON.stringify(storage)).not.toContain('API_KEY')
   expect(externalRequests).toEqual([])
 })
+
+test('API test uses the deterministic loopback mock for models and chat', async ({ page, request }) => {
+  const externalRequests: string[] = []
+  page.on('request', (value) => {
+    const host = new URL(value.url()).hostname
+    if (!['127.0.0.1', 'localhost'].includes(host)) externalRequests.push(value.url())
+  })
+  await page.addInitScript(() => localStorage.setItem('llm-relay-desk.locale', 'en-US'))
+  const config = {
+    upstream_base_url: 'http://127.0.0.1:18000/v1', upstream_protocol: 'openai',
+    default_model: 'mock/openai-nonstream-usage', request_timeout_seconds: 600,
+    native_popup_force_upstream_stream: true, force_reasoning_enabled: false,
+    default_reasoning_effort: '', prompt_enabled: true, prompt_injection_mode: 'normal',
+    debug_logging_enabled: false, debug_log_directory: 'debug_logs', debug_log_retention_files: 100,
+  }
+  let scenario = 'openai-nonstream-usage'
+  await page.route('**/admin/config', (route) => route.fulfill({ json: config }))
+  await page.route('**/admin/test-upstream', async (route) => {
+    const mock = await request.get('http://127.0.0.1:18000/v1/models')
+    await route.fulfill({ json: { ok: true, resolved_protocol: 'openai', elapsed_ms: 1, response: await mock.json() } })
+  })
+  await page.route('**/admin/test-chat', async (route) => {
+    const mock = await request.post('http://127.0.0.1:18000/v1/chat/completions', {
+      headers: { 'X-Mock-Scenario': scenario }, data: route.request().postDataJSON(),
+    })
+    const headers = mock.headers()
+    delete headers['content-length']
+    delete headers['content-encoding']
+    await route.fulfill({ status: mock.status(), headers, body: await mock.body() })
+  })
+  await page.goto('/ui/api-test')
+  await expect(page.getByRole('heading', { name: 'API Test' })).toBeVisible()
+  await page.getByRole('button', { name: 'Check connectivity' }).click()
+  await expect(page.getByText(/16 models/)).toBeVisible()
+
+  await page.getByLabel('Streaming response').uncheck()
+  await page.getByRole('button', { name: 'Send test' }).click()
+  await expect(page.getByText('Mock OpenAI response.', { exact: true })).toBeVisible()
+
+  scenario = 'openai-stream-final-usage'
+  await page.getByLabel('Streaming response').check()
+  await page.getByRole('button', { name: 'Send test' }).click()
+  await expect(page.getByText('Mock stream.', { exact: true })).toBeVisible()
+
+  scenario = 'reasoning-only'
+  await page.getByLabel('Streaming response').uncheck()
+  await page.getByRole('button', { name: 'Send test' }).click()
+  await expect(page.getByText('Mock reasoning only.', { exact: true })).toBeVisible()
+  await expect(page.getByText('No content returned')).toBeVisible()
+
+  scenario = 'http-429'
+  await page.getByRole('button', { name: 'Send test' }).click()
+  await expect(page.getByText(/429: Mock rate limit exceeded/)).toBeVisible()
+  expect(externalRequests).toEqual([])
+})

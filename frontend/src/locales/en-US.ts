@@ -16,6 +16,7 @@ export interface LocaleMessages {
     dashboard: string
     status: string
     settings: string
+    apiTest: string
     legacy: string
     monitor: string
   }
@@ -51,12 +52,14 @@ export interface LocaleMessages {
     dashboard: string
     status: string
     settings: string
+    apiTest: string
     notFound: string
   }
   common: Record<string, string>
   status: Record<string, string>
   settings: Record<string, LocaleMessageValue>
   secrets: { title: string; upstream: string; local: string; configured: string; notConfigured: string; source: string; writable: string; readOnly: string; preservePlaceholder: string; enterPlaceholder: string; reveal: string; clear: string; confirmClear: string; sources: Record<string, string> }
+  apiTest: Record<string, string>
 }
 
 const enUS: LocaleMessages = {
@@ -74,6 +77,7 @@ const enUS: LocaleMessages = {
     dashboard: 'Dashboard',
     status: 'System Status',
     settings: 'Relay Settings',
+    apiTest: 'API Test',
     legacy: 'Legacy Management UI',
     monitor: 'Realtime Monitor',
   },
@@ -109,12 +113,14 @@ const enUS: LocaleMessages = {
     dashboard: 'Dashboard - LLM Relay Desk',
     status: 'System Status - LLM Relay Desk',
     settings: 'Relay Settings - LLM Relay Desk',
+    apiTest: 'API Test - LLM Relay Desk',
     notFound: 'Page not found - LLM Relay Desk',
   },
   common: { enabled: 'Enabled', disabled: 'Disabled', retry: 'Retry' },
   status: { eyebrow: 'Relay health', title: 'System Status', refresh: 'Refresh', loading: 'Loading system status', malformed: 'Malformed status response', malformedBody: 'The relay returned invalid status data.', error: 'Status request failed', errorBody: 'The local relay could not be reached.', healthy: 'Relay service is operational', service: 'Service', version: 'Version', upstream: 'Upstream address', protocol: 'Configured / active protocol', model: 'Default model', debug: 'Debug logging' },
   settings: { eyebrow: 'Relay administration', title: 'Relay Settings', loading: 'Loading relay configuration', loadError: 'Configuration could not be loaded', relay: 'Relay configuration', upstream: 'Upstream address', protocol: 'Upstream protocol', model: 'Default model', timeout: 'Request timeout (seconds)', forceStream: 'Force upstream streaming', forceReasoning: 'Force reasoning / thinking', effort: 'Default reasoning effort', modelDefault: 'Model default', promptInjection: 'Enable prompt injection', debug: 'Enable debug logging', debugDirectory: 'Debug log directory', retention: 'Debug log retention files', save: 'Save configuration', saving: 'Saving...', saved: 'Configuration saved.', saveError: 'Configuration could not be saved.', unsavedConfirm: 'Discard unsaved configuration changes?', protocols: { auto: 'Automatic', openai: 'OpenAI compatible', ollama: 'Ollama native', vllm: 'vLLM' }, efforts: { none: 'None', low: 'Low', medium: 'Medium', high: 'High', max: 'Maximum' }, errors: { upstream: 'Enter an HTTP or HTTPS URL.', model: 'Default model is required.', timeout: 'Timeout must be between 30 and 7200.', retention: 'Retention must be between 1 and 10000.' } },
   secrets: { title: 'API keys and secret status', upstream: 'Upstream API key', local: 'Local relay API key', configured: 'Configured', notConfigured: 'Not configured', source: 'Source', writable: 'Writable from this UI', readOnly: 'Read-only', preservePlaceholder: 'Leave blank to preserve stored value', enterPlaceholder: 'Enter a new value', reveal: 'Reveal local key', clear: 'Clear', confirmClear: 'Clear this secret? This cannot be undone.', sources: { environment: 'Environment', os_keyring: 'OS keyring', encrypted_file: 'Encrypted file', missing: 'Missing' } },
+  apiTest: { eyebrow: 'Local relay validation', title: 'API Test', loading: 'Loading saved relay configuration', connectivity: 'Upstream connectivity and models', check: 'Check connectivity', checking: 'Checking...', models: 'models', protocol: 'Test protocol', model: 'Model', temperature: 'Temperature', maxTokens: 'Maximum output tokens', streaming: 'Streaming response', reasoningEnabled: 'Enable reasoning / thinking', effort: 'Reasoning effort', defaultEffort: 'Model default', task: 'Simulated task type', npcTask: 'NPC dialogue', systemTask: 'System / world event', message: 'User message', promptMode: 'Saved prompt injection mode', mode_normal: 'Normal', mode_bannerlord: 'Bannerlord task isolation', send: 'Send test', cancel: 'Cancel request', idle: 'Ready', running: 'Request running', completeStatus: 'Request complete', results: 'Test response', copy: 'Copy complete response', clear: 'Clear results', elapsed: 'Elapsed', interrupted: 'Stream interrupted before terminal event', reasoning: 'Reasoning / thinking', content: 'Final content', complete: 'Complete response', usage: 'Usage', unknown: 'Unknown', empty: 'No content returned' },
 }
 
 export default enUS
