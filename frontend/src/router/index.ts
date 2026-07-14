@@ -5,10 +5,12 @@ import NotFoundView from '@/views/NotFoundView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import StatusView from '@/views/StatusView.vue'
 import ApiTestView from '@/views/ApiTestView.vue'
+import PromptsView from '@/views/PromptsView.vue'
+import TaskIsolationView from '@/views/TaskIsolationView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
-    titleKey?: 'routes.dashboard' | 'routes.status' | 'routes.settings' | 'routes.apiTest' | 'routes.notFound'
+    titleKey?: 'routes.dashboard' | 'routes.status' | 'routes.settings' | 'routes.apiTest' | 'routes.prompts' | 'routes.taskIsolation' | 'routes.notFound'
   }
 }
 
@@ -18,6 +20,8 @@ export const routes: RouteRecordRaw[] = [
   { path: '/status', name: 'status', component: StatusView, meta: { titleKey: 'routes.status' } },
   { path: '/settings', name: 'settings', component: SettingsView, meta: { titleKey: 'routes.settings' } },
   { path: '/api-test', name: 'api-test', component: ApiTestView, meta: { titleKey: 'routes.apiTest' } },
+  { path: '/prompts', name: 'prompts', component: PromptsView, meta: { titleKey: 'routes.prompts' } },
+  { path: '/task-isolation', name: 'task-isolation', component: TaskIsolationView, meta: { titleKey: 'routes.taskIsolation' } },
   {
     path: '/:pathMatch(.*)*',
     name: 'not-found',

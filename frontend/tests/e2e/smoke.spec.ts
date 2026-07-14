@@ -123,3 +123,71 @@ test('API test uses the deterministic loopback mock for models and chat', async 
   await expect(page.getByText(/429: Mock rate limit exceeded/)).toBeVisible()
   expect(externalRequests).toEqual([])
 })
+
+test('prompt profiles and task isolation use temporary backend data', async ({ page }) => {
+  const externalRequests: string[] = []
+  page.on('request', (request) => {
+    const host = new URL(request.url()).hostname
+    if (!['127.0.0.1', 'localhost'].includes(host)) externalRequests.push(request.url())
+  })
+  await page.addInitScript(() => localStorage.setItem('llm-relay-desk.locale', 'en-US'))
+  let active: string | null = 'Default'
+  const profiles: Record<string, string> = { Default: 'Default prompt' }
+  const promptBody = () => ({ active, names: Object.keys(profiles), profiles })
+  await page.route('**/admin/prompts/**', async (route) => {
+    const url = new URL(route.request().url())
+    const parts = url.pathname.split('/').filter(Boolean)
+    const activate = parts.at(-1) === 'activate'
+    const name = decodeURIComponent(parts[activate ? parts.length - 2 : parts.length - 1] ?? '')
+    if (route.request().method() === 'PUT') {
+      profiles[name] = route.request().postDataJSON().content
+      await route.fulfill({ json: { ok: true, name, active } })
+    } else if (route.request().method() === 'DELETE') {
+      delete profiles[name]
+      if (active === name) active = Object.keys(profiles)[0] ?? null
+      await route.fulfill({ json: { ok: true, active } })
+    } else {
+      active = name
+      await route.fulfill({ json: { ok: true, active } })
+    }
+  })
+  await page.route('**/admin/prompts', (route) => route.fulfill({ json: promptBody() }))
+  let taskConfig = {
+    prompt_enabled: true, prompt_injection_mode: 'normal', player_friendly_injection_enabled: true,
+    enable_player_initiated_dialogue: true, enable_action_dialogue: false,
+    enable_npc_initiated_dialogue: true,
+  }
+  await page.route('**/admin/config', async (route) => {
+    if (route.request().method() === 'PUT') taskConfig = { ...taskConfig, ...route.request().postDataJSON() }
+    await route.fulfill({ json: route.request().method() === 'PUT' ? { ok: true, config: taskConfig } : taskConfig })
+  })
+
+  await page.goto('/ui/prompts')
+  await expect(page.getByRole('heading', { name: 'Prompt Profiles' })).toBeVisible()
+  await page.getByRole('button', { name: 'New profile' }).click()
+  await page.getByLabel('Profile name').fill('Created')
+  await page.getByLabel('System prompt content').fill('Created content')
+  await page.getByRole('button', { name: 'Save profile' }).click()
+  await expect(page.getByText('Profile saved.')).toBeVisible()
+  await page.getByLabel('System prompt content').fill('Edited content')
+  await page.getByRole('button', { name: 'Save profile' }).click()
+  await page.getByRole('button', { name: 'Set active' }).click()
+  await expect(page.getByText('Active profile updated.')).toBeVisible()
+
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'profiles.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ format_version: 1, active: 'Imported', profiles: [{ id: 'Imported', name: 'Imported', content: 'Imported content' }] })),
+  })
+  await expect(page.getByText('Profiles imported.')).toBeVisible()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export all' }).click()
+  expect((await downloadPromise).suggestedFilename()).toBe('llm-relay-desk-prompts.json')
+
+  await page.goto('/ui/task-isolation')
+  await expect(page.getByRole('heading', { name: 'Task Isolation' })).toBeVisible()
+  await page.getByLabel('Injection mode').selectOption('bannerlord')
+  await page.getByLabel('Player trade, command, and request').check()
+  await page.getByRole('button', { name: 'Save settings' }).click()
+  await expect(page.getByText('Task-isolation settings saved.')).toBeVisible()
+  expect(externalRequests).toEqual([])
+})

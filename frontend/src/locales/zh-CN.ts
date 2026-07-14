@@ -16,6 +16,8 @@ const zhCN: LocaleMessages = {
     status: '系统状态',
     settings: '中继设置',
     apiTest: 'API 测试',
+    prompts: '提示词配置集',
+    taskIsolation: '任务隔离',
     legacy: '旧版管理界面',
     monitor: '实时监视器',
   },
@@ -52,6 +54,8 @@ const zhCN: LocaleMessages = {
     status: '系统状态 - LLM Relay Desk',
     settings: '中继设置 - LLM Relay Desk',
     apiTest: 'API 测试 - LLM Relay Desk',
+    prompts: '提示词配置集 - LLM Relay Desk',
+    taskIsolation: '任务隔离 - LLM Relay Desk',
     notFound: '页面不存在 - LLM Relay Desk',
   },
   common: { enabled: '已启用', disabled: '已停用', retry: '重试' },
@@ -59,6 +63,8 @@ const zhCN: LocaleMessages = {
   settings: { eyebrow: '中继管理', title: '中继设置', loading: '正在加载中继配置', loadError: '无法加载配置', relay: '中继配置', upstream: '上游地址', protocol: '上游协议', model: '默认模型', timeout: '请求超时（秒）', forceStream: '强制上游流式传输', forceReasoning: '强制推理 / 思考', effort: '默认思考强度', modelDefault: '由模型决定', promptInjection: '启用提示词注入', debug: '启用调试日志', debugDirectory: '调试日志目录', retention: '调试日志保留文件数', save: '保存配置', saving: '正在保存…', saved: '配置已保存。', saveError: '无法保存配置。', unsavedConfirm: '放弃尚未保存的配置更改？', protocols: { auto: '自动识别', openai: 'OpenAI 兼容', ollama: 'Ollama 原生', vllm: 'vLLM' }, efforts: { none: '无', low: '低', medium: '中', high: '高', max: '最高' }, errors: { upstream: '请输入 HTTP 或 HTTPS 地址。', model: '默认模型不能为空。', timeout: '超时范围为 30 至 7200。', retention: '保留数量范围为 1 至 10000。' } },
   secrets: { title: 'API Key 与密钥状态', upstream: '上游 API Key', local: '本地中继 API Key', configured: '已配置', notConfigured: '未配置', source: '来源', writable: '可在此界面修改', readOnly: '只读', preservePlaceholder: '留空以保留已存储值', enterPlaceholder: '输入新值', reveal: '显示本地 Key', clear: '清除', confirmClear: '确定清除此密钥？此操作无法撤销。', sources: { environment: '环境变量', os_keyring: '系统密钥环', encrypted_file: '加密文件', missing: '未配置' } },
   apiTest: { eyebrow: '本地中继验证', title: 'API 测试', loading: '正在加载已保存的中继配置', connectivity: '上游连接与模型列表', check: '检查连接', checking: '正在检查…', models: '个模型', protocol: '测试协议', model: '模型', temperature: '温度', maxTokens: '最大输出 Token', streaming: '流式响应', reasoningEnabled: '启用推理 / 思考', effort: '思考强度', defaultEffort: '由模型决定', task: '模拟任务类型', npcTask: 'NPC 对话', systemTask: '系统 / 世界事件', message: '用户消息', promptMode: '已保存的提示词注入模式', mode_normal: '普通模式', mode_bannerlord: '霸主任务隔离', send: '发送测试', cancel: '取消请求', idle: '就绪', running: '请求进行中', completeStatus: '请求完成', results: '测试响应', copy: '复制完整响应', clear: '清除结果', elapsed: '耗时', interrupted: '流在终止事件前中断', reasoning: '推理 / 思考', content: '最终内容', complete: '完整响应', usage: '用量', unknown: '未知', empty: '未返回内容' },
+  prompts: { eyebrow: '提示词注入', title: '提示词配置集', create: '新建配置集', import: '导入', export: '全部导出', name: '配置集名称', content: '系统提示词内容', characters: '个字符', save: '保存配置集', saved: '配置集已保存。', active: '当前启用', activate: '设为当前', activated: '当前配置集已更新。', delete: '删除配置集', deleted: '配置集已删除。', imported: '配置集已导入。', deleteConfirm: '确定删除此提示词配置集？', unsavedConfirm: '放弃尚未保存的提示词更改？' },
+  taskIsolation: { eyebrow: '提示词路由', title: '任务隔离', save: '保存设置', saved: '任务隔离设置已保存。', unsavedConfirm: '放弃尚未保存的任务隔离更改？', mode: '提示词与注入模式', promptEnabled: '全局启用提示词注入', injectionMode: '注入模式', normal: '普通对话', bannerlord: '霸主任务隔离', master: '启用玩家友好注入', playerDialogue: '玩家主动 NPC 对话', actionDialogue: '玩家交易、命令与请求', npcDialogue: 'NPC 主动面向玩家', rules: '支持的任务规则', allowed: '允许注入提示词', passthrough: '强制透传', passthroughDetail: '外交、战争、联盟、系统事件、世界状态、NPC-NPC 对话、结构化控制任务、路由、图像提示词及未知任务。', fallback: '未知或不支持的任务不注入提示词并直接透传。显式 relay_task_type 元数据优先。' },
 }
 
 export default zhCN
