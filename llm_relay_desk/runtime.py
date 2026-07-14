@@ -15,13 +15,13 @@ from llm_relay_desk.settings import (
     DEFAULT_PROMPTS,
     Settings,
 )
-from llm_relay_desk.storage import JsonStore
+from llm_relay_desk.storage import JsonStore, SecretConfigStore
 
 
 @dataclass(slots=True)
 class Runtime:
     settings: Settings
-    config_store: JsonStore
+    config_store: SecretConfigStore
     prompt_store: JsonStore
     prompts: PromptService
     popup: NativePopupController
@@ -32,7 +32,7 @@ class Runtime:
     @classmethod
     def create(cls, settings: Settings) -> "Runtime":
         settings.data_dir.mkdir(parents=True, exist_ok=True)
-        config_store = JsonStore(settings.config_path, DEFAULT_CONFIG)
+        config_store = SecretConfigStore(settings.config_path, DEFAULT_CONFIG)
         prompt_store = JsonStore(settings.prompts_path, DEFAULT_PROMPTS)
 
         existing_config = config_store.read()
@@ -65,8 +65,8 @@ class Runtime:
                 legacy_opacity <= 0.001
             )
         merged_config["config_schema_version"] = CONFIG_SCHEMA_VERSION
-        if merged_config != existing_config:
-            config_store.write(merged_config)
+        merged_config["secret_storage_version"] = 1
+        config_store.write(merged_config)
 
         def save_popup_position(x: int, y: int) -> None:
             config_store.update(
@@ -79,9 +79,6 @@ class Runtime:
                 }
             )
 
-        # multiprocessing uses "spawn" on Windows. This installer replaces the
-        # spawn target with an importable wrapper that reapplies the subtitle
-        # method patch inside the child process.
         install_reasoning_stream_patch()
 
         popup = NativePopupController(on_position_saved=save_popup_position)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,6 +16,7 @@ from llm_relay_desk.api.routes import (
     openai_router,
     system_router,
 )
+from llm_relay_desk.api.routes.security import router as security_router
 from llm_relay_desk.reasoning_middleware import VLLMReasoningResponseMiddleware
 from llm_relay_desk.runtime import Runtime
 from llm_relay_desk.settings import (
@@ -24,29 +26,41 @@ from llm_relay_desk.settings import (
     Settings,
 )
 
-_MODE_CONTROL_SCRIPT = (
-    '<script src="/ui/game-mode-controls.js?v=5.2.0"></script>'
+_UI_SCRIPTS = (
+    '<script src="/ui/game-mode-controls.js?v=5.2.0"></script>',
+    '<script src="/ui/security-controls.js?v=5.3.0"></script>',
 )
 
 
-def inject_mode_control_script(html: str) -> str:
-    """Inject the v5.2 mode/protocol controls without replacing the existing Web UI.
-
-    Keeping this as a separate script avoids copying and maintaining the large
-    ``static/index.html`` and ``static/app.js`` files. Repeated injection is
-    idempotent.
-    """
-
-    if "game-mode-controls.js" in html:
-        return html
+def inject_ui_scripts(html: str) -> str:
     marker = "</body>"
+    additions = [script for script in _UI_SCRIPTS if script.split('"')[1] not in html]
+    if not additions:
+        return html
+    block = "\n  ".join(additions)
     if marker in html:
-        return html.replace(marker, f"  {_MODE_CONTROL_SCRIPT}\n{marker}", 1)
-    return f"{html}\n{_MODE_CONTROL_SCRIPT}\n"
+        return html.replace(marker, f"  {block}\n{marker}", 1)
+    return f"{html}\n{block}\n"
+
+
+def inject_mode_control_script(html: str) -> str:
+    """Backward-compatible name retained for existing tests/imports."""
+    return inject_ui_scripts(html)
 
 
 def _read_ui_index(path: Path) -> str:
-    return inject_mode_control_script(path.read_text(encoding="utf-8"))
+    return inject_ui_scripts(path.read_text(encoding="utf-8"))
+
+
+
+def _cors_origins(port: int) -> list[str]:
+    configured = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+    if configured:
+        return [item.strip() for item in configured.split(",") if item.strip()]
+    return [
+        f"http://127.0.0.1:{port}",
+        f"http://localhost:{port}",
+    ]
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -71,10 +85,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=_cors_origins(resolved_settings.port),
         allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Relay-Task-Type",
+            "X-Relay-Admin-Test",
+        ],
     )
     app.add_middleware(
         VLLMReasoningResponseMiddleware,
@@ -83,6 +102,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(system_router)
     app.include_router(monitor_router)
+    # Must be registered before the legacy admin router so the redacted
+    # /admin/config handlers take precedence over the old plaintext handlers.
+    app.include_router(security_router)
     app.include_router(admin_router)
     app.include_router(native_router)
     app.include_router(openai_router)

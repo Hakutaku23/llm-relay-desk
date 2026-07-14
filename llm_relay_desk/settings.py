@@ -10,18 +10,17 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-APP_VERSION = "5.2.4"
+APP_VERSION = "5.3.0"
 APP_TITLE = "LLM Relay Desk"
 APP_DESCRIPTION = "本地 LLM API 转发、提示词管理、Web 监视器与原生字幕浮层"
 
-CONFIG_SCHEMA_VERSION = 13
+CONFIG_SCHEMA_VERSION = 14
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "config_schema_version": CONFIG_SCHEMA_VERSION,
+    "secret_storage_version": 1,
     "upstream_base_url": "http://127.0.0.1:11435/v1",
     "upstream_protocol": "auto",
-    "upstream_api_key": "ollama",
-    "local_api_key": "sk-local-ollama-change-me",
     "default_model": "qwen3.6:35b",
     "force_reasoning_enabled": False,
     "default_reasoning_effort": "",
@@ -47,7 +46,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "native_popup_font_size": 24,
     "native_popup_font_family": "Microsoft YaHei UI",
     "native_popup_text_align": "left",
-    "native_popup_opacity": 0.88,  # legacy combined opacity
+    "native_popup_opacity": 0.88,
     "native_popup_text_opacity": 1.0,
     "native_popup_background_opacity": 0.88,
     "native_popup_content_mode": "dialogue",
