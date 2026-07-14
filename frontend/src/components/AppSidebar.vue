@@ -13,6 +13,8 @@ const { t } = useI18n()
     </div>
     <nav :aria-label="t('navigation.label')">
       <RouterLink class="nav-link" to="/">{{ t('navigation.dashboard') }}</RouterLink>
+      <RouterLink class="nav-link" to="/status">{{ t('navigation.status') }}</RouterLink>
+      <RouterLink class="nav-link" to="/settings">{{ t('navigation.settings') }}</RouterLink>
       <a class="nav-link" href="/ui-legacy/">{{ t('navigation.legacy') }}</a>
       <a class="nav-link" href="/monitor/">{{ t('navigation.monitor') }}</a>
     </nav>

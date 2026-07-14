@@ -13,6 +13,8 @@ const validHealth = {
   model: 'local-model',
   resolved_upstream_protocol: 'openai',
   upstream: 'private-value-that-must-not-be-stored',
+  upstream_protocol: 'openai',
+  debug_logging_enabled: false,
 }
 
 function deferredResponse() {

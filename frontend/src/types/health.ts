@@ -4,6 +4,9 @@ export interface HealthSummary {
   status: 'ok'
   model: string | null
   upstreamProtocol: string
+  upstream: string
+  configuredProtocol: string
+  debugLoggingEnabled: boolean
 }
 
 export class MalformedHealthResponseError extends Error {

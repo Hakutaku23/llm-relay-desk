@@ -15,6 +15,7 @@ export default defineConfig({
     host: '127.0.0.1',
     proxy: {
       '/health': 'http://127.0.0.1:11434',
+      '/admin': 'http://127.0.0.1:11434',
       '/ui-legacy': 'http://127.0.0.1:11434',
       '/monitor': 'http://127.0.0.1:11434',
       '/ws/monitor': {

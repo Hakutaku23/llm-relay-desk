@@ -13,6 +13,8 @@ const zhCN: LocaleMessages = {
   navigation: {
     label: '主导航',
     dashboard: '仪表盘',
+    status: '系统状态',
+    settings: '中继设置',
     legacy: '旧版管理界面',
     monitor: '实时监视器',
   },
@@ -46,8 +48,14 @@ const zhCN: LocaleMessages = {
   },
   routes: {
     dashboard: '仪表盘 - LLM Relay Desk',
+    status: '系统状态 - LLM Relay Desk',
+    settings: '中继设置 - LLM Relay Desk',
     notFound: '页面不存在 - LLM Relay Desk',
   },
+  common: { enabled: '已启用', disabled: '已停用', retry: '重试' },
+  status: { eyebrow: '中继健康状态', title: '系统状态', refresh: '刷新', loading: '正在加载系统状态', malformed: '状态响应格式错误', malformedBody: '中继返回了无效的状态数据。', error: '状态请求失败', errorBody: '无法连接到本地中继服务。', healthy: '中继服务运行正常', service: '服务', version: '版本', upstream: '上游地址', protocol: '配置协议 / 当前协议', model: '默认模型', debug: '调试日志' },
+  settings: { eyebrow: '中继管理', title: '中继设置', loading: '正在加载中继配置', loadError: '无法加载配置', relay: '中继配置', upstream: '上游地址', protocol: '上游协议', model: '默认模型', timeout: '请求超时（秒）', forceStream: '强制上游流式传输', forceReasoning: '强制推理 / 思考', effort: '默认思考强度', modelDefault: '由模型决定', promptInjection: '启用提示词注入', debug: '启用调试日志', debugDirectory: '调试日志目录', retention: '调试日志保留文件数', save: '保存配置', saving: '正在保存…', saved: '配置已保存。', saveError: '无法保存配置。', unsavedConfirm: '放弃尚未保存的配置更改？', protocols: { auto: '自动识别', openai: 'OpenAI 兼容', ollama: 'Ollama 原生', vllm: 'vLLM' }, efforts: { none: '无', low: '低', medium: '中', high: '高', max: '最高' }, errors: { upstream: '请输入 HTTP 或 HTTPS 地址。', model: '默认模型不能为空。', timeout: '超时范围为 30 至 7200。', retention: '保留数量范围为 1 至 10000。' } },
+  secrets: { title: 'API Key 与密钥状态', upstream: '上游 API Key', local: '本地中继 API Key', configured: '已配置', notConfigured: '未配置', source: '来源', writable: '可在此界面修改', readOnly: '只读', preservePlaceholder: '留空以保留已存储值', enterPlaceholder: '输入新值', reveal: '显示本地 Key', clear: '清除', confirmClear: '确定清除此密钥？此操作无法撤销。', sources: { environment: '环境变量', os_keyring: '系统密钥环', encrypted_file: '加密文件', missing: '未配置' } },
 }
 
 export default zhCN

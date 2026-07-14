@@ -16,6 +16,9 @@ export async function getHealth(signal?: AbortSignal): Promise<HealthSummary> {
     value.status !== 'ok' ||
     (value.model !== null && typeof value.model !== 'string') ||
     typeof value.resolved_upstream_protocol !== 'string'
+    || typeof value.upstream !== 'string'
+    || typeof value.upstream_protocol !== 'string'
+    || typeof value.debug_logging_enabled !== 'boolean'
   ) {
     throw new MalformedHealthResponseError()
   }
@@ -26,5 +29,8 @@ export async function getHealth(signal?: AbortSignal): Promise<HealthSummary> {
     status: value.status,
     model: value.model,
     upstreamProtocol: value.resolved_upstream_protocol,
+    upstream: value.upstream,
+    configuredProtocol: value.upstream_protocol,
+    debugLoggingEnabled: value.debug_logging_enabled,
   }
 }

@@ -19,6 +19,9 @@ async function mountAt(path: string, locale: SupportedLocale = 'en-US') {
           status: 'ok',
           model: null,
           resolved_upstream_protocol: 'ollama',
+          upstream: 'http://127.0.0.1:18000/v1',
+          upstream_protocol: 'auto',
+          debug_logging_enabled: false,
         }),
       ),
     ),
@@ -70,6 +73,8 @@ describe('router shell', () => {
     const links = wrapper.findAll('nav a')
     expect(links.map((link) => link.attributes('href'))).toEqual([
       '/ui/',
+      '/ui/status',
+      '/ui/settings',
       '/ui-legacy/',
       '/monitor/',
     ])
