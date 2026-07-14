@@ -19,6 +19,8 @@ const zhCN: LocaleMessages = {
     prompts: '提示词配置集',
     taskIsolation: '任务隔离',
     subtitles: '字幕设置',
+    debugLogs: '调试日志',
+    vueMonitor: '实时监视器',
     legacy: '旧版管理界面',
     monitor: '实时监视器',
   },
@@ -58,6 +60,8 @@ const zhCN: LocaleMessages = {
     prompts: '提示词配置集 - LLM Relay Desk',
     taskIsolation: '任务隔离 - LLM Relay Desk',
     subtitles: '字幕设置 - LLM Relay Desk',
+    debugLogs: '调试日志 - LLM Relay Desk',
+    monitor: '实时监视器 - LLM Relay Desk',
     notFound: '页面不存在 - LLM Relay Desk',
   },
   common: { enabled: '已启用', disabled: '已停用', retry: '重试' },
@@ -68,6 +72,8 @@ const zhCN: LocaleMessages = {
   prompts: { eyebrow: '提示词注入', title: '提示词配置集', create: '新建配置集', import: '导入', export: '全部导出', name: '配置集名称', content: '系统提示词内容', characters: '个字符', save: '保存配置集', saved: '配置集已保存。', active: '当前启用', activate: '设为当前', activated: '当前配置集已更新。', delete: '删除配置集', deleted: '配置集已删除。', imported: '配置集已导入。', deleteConfirm: '确定删除此提示词配置集？', unsavedConfirm: '放弃尚未保存的提示词更改？' },
   taskIsolation: { eyebrow: '提示词路由', title: '任务隔离', save: '保存设置', saved: '任务隔离设置已保存。', unsavedConfirm: '放弃尚未保存的任务隔离更改？', mode: '提示词与注入模式', promptEnabled: '全局启用提示词注入', injectionMode: '注入模式', normal: '普通对话', bannerlord: '霸主任务隔离', master: '启用玩家友好注入', playerDialogue: '玩家主动 NPC 对话', actionDialogue: '玩家交易、命令与请求', npcDialogue: 'NPC 主动面向玩家', rules: '支持的任务规则', allowed: '允许注入提示词', passthrough: '强制透传', passthroughDetail: '外交、战争、联盟、系统事件、世界状态、NPC-NPC 对话、结构化控制任务、路由、图像提示词及未知任务。', fallback: '未知或不支持的任务不注入提示词并直接透传。显式 relay_task_type 元数据优先。' },
   subtitles: { eyebrow:'桌面浮层',title:'字幕设置',loading:'正在加载字幕设置',save:'保存设置',saving:'正在保存…',reset:'重置更改',saved:'字幕设置已保存。',unsavedConfirm:'放弃尚未保存的字幕更改？',windowsNote:'鼠标穿透和分层窗口行为为 Windows 专用功能。',native:{title:'原生字幕状态',enabled:'配置为已启用',disabled:'配置为已停用',position:'进入定位模式',active:'定位模式最多持续 60 秒。拖动桌面字幕即可保存位置。'},preview:{title:'高保真预览',generate:'生成预览',loading:'正在渲染预览…',alt:'渲染后的字幕预览'},position:{title:'位置与尺寸',preset:'预设位置',width:'宽度',height:'高度',offsetX:'预设 X 偏移',offsetY:'预设 Y 偏移',customX:'自定义绝对 X',customY:'自定义绝对 Y',top_left:'左上',top_center:'顶部居中',top_right:'右上',center_left:'左侧居中',center:'居中',center_right:'右侧居中',bottom_left:'左下',bottom_center:'底部居中',bottom_right:'右下',custom:'自定义绝对位置'},typography:{title:'字体排版',refreshFonts:'刷新已安装字体',font:'字体名称',size:'字号',align:'文字对齐',left:'左对齐',center:'居中',right:'右对齐'},appearance:{title:'颜色与效果',textOpacity:'文字不透明度',backgroundOpacity:'背景不透明度',backgroundColor:'背景颜色',textColor:'正文颜色',mutedColor:'辅助文字颜色',borderColor:'边框颜色',shadowColor:'阴影颜色',outlineColor:'描边颜色',errorColor:'错误颜色',shadow:'启用文字阴影',shadowOffset:'阴影偏移',outline:'启用文字描边',outlineWidth:'描边宽度'},behavior:{title:'内容与行为',enabled:'启用原生字幕',close:'自动关闭时间（秒）',mode:'字幕内容模式',dialogue:'仅配置的对话字段',all:'所有响应文字',fields:'对话字段名（逗号分隔）',fallback:'启用纯文本回退',reasoning:'显示推理文字',clickThrough:'鼠标穿透',forceStream:'为字幕更新强制上游流式传输'} },
+  debugLogs:{eyebrow:'本地诊断',title:'调试日志',refresh:'刷新',clear:'全部清除',loading:'正在加载调试日志',empty:'没有调试日志',select:'选择一条日志查看详情。',requestId:'请求 ID',timestamp:'时间戳',client:'客户端请求',upstream:'上游请求',response:'完整上游响应',copy:'复制',delete:'删除日志',deleteConfirm:'确定删除这条调试日志？',clearConfirm:'确定清除全部调试日志？'},
+  monitor:{eyebrow:'实时中继流量',title:'实时监视器',reconnect:'重新连接',clear:'清空历史',clearConfirm:'确定清空监视历史？',autoSelect:'自动选择新请求',empty:'正在等待 API 请求。',emptyDetail:'选择请求以查看详情。',unknownModel:'未指定模型',requestId:'请求 ID',model:'模型',route:'路由',elapsed:'耗时',http:'HTTP 状态',running:'进行中',unknown:'未知',reasoning:'推理 / 思考',content:'最终内容',noReasoning:'没有推理内容。',noContent:'没有最终内容。',copy:'复制',connection:{connecting:'正在连接',connected:'已连接',disconnected:'已断开'},status:{streaming:'流式接收中',complete:'已完成',error:'错误',cancelled:'已取消'}},
 }
 
 export default zhCN

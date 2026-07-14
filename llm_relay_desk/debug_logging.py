@@ -656,6 +656,56 @@ class DebugLogManager:
             "sensitive_headers_redacted": True,
         }
 
+    def list_logs(self) -> list[dict[str, Any]]:
+        directory = self.resolve_directory()
+        try:
+            paths = sorted(
+                self._log_files(directory),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+        except OSError:
+            return []
+        result: list[dict[str, Any]] = []
+        for path in paths:
+            try:
+                document = json.loads(path.read_text(encoding="utf-8"))
+                stat = path.stat()
+            except (OSError, ValueError):
+                continue
+            response = document.get("upstream_response", {})
+            result.append(
+                {
+                    "id": path.name,
+                    "timestamp": document.get("timestamp"),
+                    "request_id": document.get("request_id"),
+                    "status_code": response.get("status_code"),
+                    "outcome": response.get("outcome"),
+                    "size_bytes": stat.st_size,
+                }
+            )
+        return result
+
+    def read_log(self, log_id: str) -> dict[str, Any]:
+        return json.loads(self._resolve_log(log_id).read_text(encoding="utf-8"))
+
+    def delete_log(self, log_id: str) -> bool:
+        path = self._resolve_log(log_id)
+        try:
+            path.unlink()
+            return True
+        except FileNotFoundError:
+            return False
+
+    def _resolve_log(self, log_id: str) -> Path:
+        if not log_id or Path(log_id).name != log_id or not log_id.endswith((".json", ".jsonl")):
+            raise ValueError("invalid debug log id")
+        directory = self.resolve_directory()
+        path = (directory / log_id).resolve()
+        if path.parent != directory or not path.is_file():
+            raise FileNotFoundError(log_id)
+        return path
+
     def clear(self) -> int:
         directory = self.resolve_directory()
         removed = 0

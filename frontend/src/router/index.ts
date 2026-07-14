@@ -8,10 +8,12 @@ import ApiTestView from '@/views/ApiTestView.vue'
 import PromptsView from '@/views/PromptsView.vue'
 import TaskIsolationView from '@/views/TaskIsolationView.vue'
 import SubtitlesView from '@/views/SubtitlesView.vue'
+import DebugLogsView from '@/views/DebugLogsView.vue'
+import MonitorView from '@/views/MonitorView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
-    titleKey?: 'routes.dashboard' | 'routes.status' | 'routes.settings' | 'routes.apiTest' | 'routes.prompts' | 'routes.taskIsolation' | 'routes.subtitles' | 'routes.notFound'
+    titleKey?: 'routes.dashboard' | 'routes.status' | 'routes.settings' | 'routes.apiTest' | 'routes.prompts' | 'routes.taskIsolation' | 'routes.subtitles' | 'routes.debugLogs' | 'routes.monitor' | 'routes.notFound'
   }
 }
 
@@ -24,6 +26,8 @@ export const routes: RouteRecordRaw[] = [
   { path: '/prompts', name: 'prompts', component: PromptsView, meta: { titleKey: 'routes.prompts' } },
   { path: '/task-isolation', name: 'task-isolation', component: TaskIsolationView, meta: { titleKey: 'routes.taskIsolation' } },
   { path: '/subtitles', name: 'subtitles', component: SubtitlesView, meta: { titleKey: 'routes.subtitles' } },
+  { path: '/debug-logs', name: 'debug-logs', component: DebugLogsView, meta: { titleKey: 'routes.debugLogs' } },
+  { path: '/monitor', name: 'monitor', component: MonitorView, meta: { titleKey: 'routes.monitor' } },
   {
     path: '/:pathMatch(.*)*',
     name: 'not-found',

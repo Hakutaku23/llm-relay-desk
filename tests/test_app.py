@@ -258,3 +258,26 @@ def test_high_fidelity_subtitle_preview_uses_png_renderer(tmp_path: Path) -> Non
         # Rendering a preview must not persist unsaved form settings.
         stored = client.get("/admin/subtitle-config").json()
         assert stored["native_popup_text_color"] != "#ff0000"
+
+
+def test_debug_log_list_detail_and_single_delete_are_path_safe(tmp_path: Path) -> None:
+    app = create_app(make_settings(tmp_path))
+    manager = app.state.runtime.debug_logs
+    directory = manager.resolve_directory()
+    directory.mkdir(parents=True, exist_ok=True)
+    name = "20260101_request.json"
+    (directory / name).write_text(
+        '{"format_version":2,"timestamp":"2026-01-01T00:00:00Z",'
+        '"request_id":"req","client_request":{"headers":{"Authorization":"<redacted>"}},'
+        '"upstream_request":{},"upstream_response":{"status_code":200,"outcome":"completed"}}',
+        encoding="utf-8",
+    )
+    with TestClient(app) as client:
+        listed = client.get("/admin/debug-logs")
+        assert listed.status_code == 200
+        assert listed.json()["logs"][0]["id"] == name
+        detail = client.get(f"/admin/debug-logs/{name}")
+        assert detail.json()["client_request"]["headers"]["Authorization"] == "<redacted>"
+        assert client.get("/admin/debug-logs/..%2Fconfig.json").status_code == 404
+        assert client.delete(f"/admin/debug-logs/{name}").json()["ok"] is True
+        assert not (directory / name).exists()

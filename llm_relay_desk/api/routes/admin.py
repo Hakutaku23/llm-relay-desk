@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from io import BytesIO
 import time
 import uuid
@@ -88,7 +89,27 @@ async def put_config(
 
 @router.get("/debug-logs")
 async def debug_log_status(request: Request) -> dict[str, Any]:
-    return runtime_from_request(request).debug_logs.status()
+    manager = runtime_from_request(request).debug_logs
+    return {**manager.status(), "logs": await asyncio.to_thread(manager.list_logs)}
+
+
+@router.get("/debug-logs/{log_id}")
+async def get_debug_log(request: Request, log_id: str) -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(runtime_from_request(request).debug_logs.read_log, log_id)
+    except (FileNotFoundError, ValueError, OSError, json.JSONDecodeError):
+        raise HTTPException(status_code=404, detail="Debug log not found") from None
+
+
+@router.delete("/debug-logs/{log_id}")
+async def delete_debug_log(request: Request, log_id: str) -> dict[str, Any]:
+    try:
+        removed = await asyncio.to_thread(runtime_from_request(request).debug_logs.delete_log, log_id)
+    except (FileNotFoundError, ValueError, OSError):
+        removed = False
+    if not removed:
+        raise HTTPException(status_code=404, detail="Debug log not found")
+    return {"ok": True, "id": log_id}
 
 
 @router.delete("/debug-logs")

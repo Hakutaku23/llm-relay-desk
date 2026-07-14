@@ -19,6 +19,8 @@ const { t } = useI18n()
       <RouterLink class="nav-link" to="/prompts">{{ t('navigation.prompts') }}</RouterLink>
       <RouterLink class="nav-link" to="/task-isolation">{{ t('navigation.taskIsolation') }}</RouterLink>
       <RouterLink class="nav-link" to="/subtitles">{{ t('navigation.subtitles') }}</RouterLink>
+      <RouterLink class="nav-link" to="/debug-logs">{{ t('navigation.debugLogs') }}</RouterLink>
+      <RouterLink class="nav-link" to="/monitor">{{ t('navigation.vueMonitor') }}</RouterLink>
       <a class="nav-link" href="/ui-legacy/">{{ t('navigation.legacy') }}</a>
       <a class="nav-link" href="/monitor/">{{ t('navigation.monitor') }}</a>
     </nav>
