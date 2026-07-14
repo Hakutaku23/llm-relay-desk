@@ -19,6 +19,7 @@ export interface LocaleMessages {
     apiTest: string
     prompts: string
     taskIsolation: string
+    subtitles: string
     legacy: string
     monitor: string
   }
@@ -57,6 +58,7 @@ export interface LocaleMessages {
     apiTest: string
     prompts: string
     taskIsolation: string
+    subtitles: string
     notFound: string
   }
   common: Record<string, string>
@@ -66,6 +68,7 @@ export interface LocaleMessages {
   apiTest: Record<string, string>
   prompts: Record<string, string>
   taskIsolation: Record<string, string>
+  subtitles: Record<string, LocaleMessageValue>
 }
 
 const enUS: LocaleMessages = {
@@ -86,6 +89,7 @@ const enUS: LocaleMessages = {
     apiTest: 'API Test',
     prompts: 'Prompt Profiles',
     taskIsolation: 'Task Isolation',
+    subtitles: 'Subtitles',
     legacy: 'Legacy Management UI',
     monitor: 'Realtime Monitor',
   },
@@ -124,6 +128,7 @@ const enUS: LocaleMessages = {
     apiTest: 'API Test - LLM Relay Desk',
     prompts: 'Prompt Profiles - LLM Relay Desk',
     taskIsolation: 'Task Isolation - LLM Relay Desk',
+    subtitles: 'Subtitles - LLM Relay Desk',
     notFound: 'Page not found - LLM Relay Desk',
   },
   common: { enabled: 'Enabled', disabled: 'Disabled', retry: 'Retry' },
@@ -133,6 +138,7 @@ const enUS: LocaleMessages = {
   apiTest: { eyebrow: 'Local relay validation', title: 'API Test', loading: 'Loading saved relay configuration', connectivity: 'Upstream connectivity and models', check: 'Check connectivity', checking: 'Checking...', models: 'models', protocol: 'Test protocol', model: 'Model', temperature: 'Temperature', maxTokens: 'Maximum output tokens', streaming: 'Streaming response', reasoningEnabled: 'Enable reasoning / thinking', effort: 'Reasoning effort', defaultEffort: 'Model default', task: 'Simulated task type', npcTask: 'NPC dialogue', systemTask: 'System / world event', message: 'User message', promptMode: 'Saved prompt injection mode', mode_normal: 'Normal', mode_bannerlord: 'Bannerlord task isolation', send: 'Send test', cancel: 'Cancel request', idle: 'Ready', running: 'Request running', completeStatus: 'Request complete', results: 'Test response', copy: 'Copy complete response', clear: 'Clear results', elapsed: 'Elapsed', interrupted: 'Stream interrupted before terminal event', reasoning: 'Reasoning / thinking', content: 'Final content', complete: 'Complete response', usage: 'Usage', unknown: 'Unknown', empty: 'No content returned' },
   prompts: { eyebrow: 'Prompt injection', title: 'Prompt Profiles', create: 'New profile', import: 'Import', export: 'Export all', name: 'Profile name', content: 'System prompt content', characters: 'characters', save: 'Save profile', saved: 'Profile saved.', active: 'Active', activate: 'Set active', activated: 'Active profile updated.', delete: 'Delete profile', deleted: 'Profile deleted.', imported: 'Profiles imported.', deleteConfirm: 'Delete this prompt profile?', unsavedConfirm: 'Discard unsaved prompt changes?' },
   taskIsolation: { eyebrow: 'Prompt routing', title: 'Task Isolation', save: 'Save settings', saved: 'Task-isolation settings saved.', unsavedConfirm: 'Discard unsaved task-isolation changes?', mode: 'Prompt and injection mode', promptEnabled: 'Enable prompt injection globally', injectionMode: 'Injection mode', normal: 'Normal conversation', bannerlord: 'Bannerlord task isolation', master: 'Enable player-friendly injection', playerDialogue: 'Player initiated NPC dialogue', actionDialogue: 'Player trade, command, and request', npcDialogue: 'NPC initiated player dialogue', rules: 'Supported task rules', allowed: 'Prompt injection allowed', passthrough: 'Forced passthrough', passthroughDetail: 'Diplomacy, war, alliances, system events, world state, NPC-to-NPC dialogue, structured control tasks, routing, image prompts, and unknown tasks.', fallback: 'Unknown or unsupported tasks pass through without prompt injection. Explicit relay_task_type metadata takes precedence.' },
+  subtitles: { eyebrow:'Desktop overlay',title:'Subtitle Settings',loading:'Loading subtitle settings',save:'Save settings',saving:'Saving…',reset:'Reset changes',saved:'Subtitle settings saved.',unsavedConfirm:'Discard unsaved subtitle changes?',windowsNote:'Click-through and layered-window behavior is Windows-specific.',native:{title:'Native subtitle status',enabled:'Configured as enabled',disabled:'Configured as disabled',position:'Enter positioning mode',active:'Positioning mode is active for up to 60 seconds. Drag the desktop subtitle to save its position.'},preview:{title:'High-fidelity preview',generate:'Generate preview',loading:'Rendering preview…',alt:'Rendered subtitle preview'},position:{title:'Position and size',preset:'Preset position',width:'Width',height:'Height',offsetX:'Preset X offset',offsetY:'Preset Y offset',customX:'Custom absolute X',customY:'Custom absolute Y',top_left:'Top left',top_center:'Top center',top_right:'Top right',center_left:'Center left',center:'Center',center_right:'Center right',bottom_left:'Bottom left',bottom_center:'Bottom center',bottom_right:'Bottom right',custom:'Custom absolute'},typography:{title:'Typography',refreshFonts:'Refresh installed fonts',font:'Font family',size:'Font size',align:'Text alignment',left:'Left',center:'Center',right:'Right'},appearance:{title:'Colors and effects',textOpacity:'Text opacity',backgroundOpacity:'Background opacity',backgroundColor:'Background color',textColor:'Text color',mutedColor:'Secondary text color',borderColor:'Border color',shadowColor:'Shadow color',outlineColor:'Outline color',errorColor:'Error color',shadow:'Enable text shadow',shadowOffset:'Shadow offset',outline:'Enable text outline',outlineWidth:'Outline width'},behavior:{title:'Content and behavior',enabled:'Enable native subtitles',close:'Auto-close timeout (seconds)',mode:'Subtitle content mode',dialogue:'Configured dialogue only',all:'All response text',fields:'Dialogue field names (comma separated)',fallback:'Use plain-text fallback',reasoning:'Show reasoning text',clickThrough:'Mouse click-through',forceStream:'Force upstream streaming for subtitle updates'} },
 }
 
 export default enUS

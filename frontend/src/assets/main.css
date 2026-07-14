@@ -73,6 +73,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .prompt-editor input, .prompt-editor textarea { width: 100%; padding: 10px; border: 1px solid #a8b3bc; font: inherit; }
 .plain-preview { margin-top: 18px; padding: 14px; background: #fff; border: 1px solid #dce2e7; white-space: pre-wrap; overflow-wrap: anywhere; }
 .rule-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }.rule-grid article { padding: 16px; border: 1px solid #dce2e7; }.rule-grid code { display: block; margin: 5px 0; }
+.subtitle-page { max-width: 1080px; }.subtitle-preview img { display: block; width: 100%; max-height: 360px; margin-top: 16px; object-fit: contain; background: #20262c; }.color-field span { display: grid; grid-template-columns: 42px 1fr; gap: 8px; }.color-field input[type=color] { width: 42px; height: 40px; padding: 2px; border: 1px solid #a8b3bc; }.platform-note { padding: 10px 12px; border-left: 3px solid #b37613; background: #fff8e9; color: #5f4a20; }
 @media (max-width: 720px) {
   .app-frame { grid-template-columns: 1fr; }
   .sidebar { grid-template-columns: 38px 1fr; padding: 14px 16px; }

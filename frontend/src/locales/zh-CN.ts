@@ -18,6 +18,7 @@ const zhCN: LocaleMessages = {
     apiTest: 'API 测试',
     prompts: '提示词配置集',
     taskIsolation: '任务隔离',
+    subtitles: '字幕设置',
     legacy: '旧版管理界面',
     monitor: '实时监视器',
   },
@@ -56,6 +57,7 @@ const zhCN: LocaleMessages = {
     apiTest: 'API 测试 - LLM Relay Desk',
     prompts: '提示词配置集 - LLM Relay Desk',
     taskIsolation: '任务隔离 - LLM Relay Desk',
+    subtitles: '字幕设置 - LLM Relay Desk',
     notFound: '页面不存在 - LLM Relay Desk',
   },
   common: { enabled: '已启用', disabled: '已停用', retry: '重试' },
@@ -65,6 +67,7 @@ const zhCN: LocaleMessages = {
   apiTest: { eyebrow: '本地中继验证', title: 'API 测试', loading: '正在加载已保存的中继配置', connectivity: '上游连接与模型列表', check: '检查连接', checking: '正在检查…', models: '个模型', protocol: '测试协议', model: '模型', temperature: '温度', maxTokens: '最大输出 Token', streaming: '流式响应', reasoningEnabled: '启用推理 / 思考', effort: '思考强度', defaultEffort: '由模型决定', task: '模拟任务类型', npcTask: 'NPC 对话', systemTask: '系统 / 世界事件', message: '用户消息', promptMode: '已保存的提示词注入模式', mode_normal: '普通模式', mode_bannerlord: '霸主任务隔离', send: '发送测试', cancel: '取消请求', idle: '就绪', running: '请求进行中', completeStatus: '请求完成', results: '测试响应', copy: '复制完整响应', clear: '清除结果', elapsed: '耗时', interrupted: '流在终止事件前中断', reasoning: '推理 / 思考', content: '最终内容', complete: '完整响应', usage: '用量', unknown: '未知', empty: '未返回内容' },
   prompts: { eyebrow: '提示词注入', title: '提示词配置集', create: '新建配置集', import: '导入', export: '全部导出', name: '配置集名称', content: '系统提示词内容', characters: '个字符', save: '保存配置集', saved: '配置集已保存。', active: '当前启用', activate: '设为当前', activated: '当前配置集已更新。', delete: '删除配置集', deleted: '配置集已删除。', imported: '配置集已导入。', deleteConfirm: '确定删除此提示词配置集？', unsavedConfirm: '放弃尚未保存的提示词更改？' },
   taskIsolation: { eyebrow: '提示词路由', title: '任务隔离', save: '保存设置', saved: '任务隔离设置已保存。', unsavedConfirm: '放弃尚未保存的任务隔离更改？', mode: '提示词与注入模式', promptEnabled: '全局启用提示词注入', injectionMode: '注入模式', normal: '普通对话', bannerlord: '霸主任务隔离', master: '启用玩家友好注入', playerDialogue: '玩家主动 NPC 对话', actionDialogue: '玩家交易、命令与请求', npcDialogue: 'NPC 主动面向玩家', rules: '支持的任务规则', allowed: '允许注入提示词', passthrough: '强制透传', passthroughDetail: '外交、战争、联盟、系统事件、世界状态、NPC-NPC 对话、结构化控制任务、路由、图像提示词及未知任务。', fallback: '未知或不支持的任务不注入提示词并直接透传。显式 relay_task_type 元数据优先。' },
+  subtitles: { eyebrow:'桌面浮层',title:'字幕设置',loading:'正在加载字幕设置',save:'保存设置',saving:'正在保存…',reset:'重置更改',saved:'字幕设置已保存。',unsavedConfirm:'放弃尚未保存的字幕更改？',windowsNote:'鼠标穿透和分层窗口行为为 Windows 专用功能。',native:{title:'原生字幕状态',enabled:'配置为已启用',disabled:'配置为已停用',position:'进入定位模式',active:'定位模式最多持续 60 秒。拖动桌面字幕即可保存位置。'},preview:{title:'高保真预览',generate:'生成预览',loading:'正在渲染预览…',alt:'渲染后的字幕预览'},position:{title:'位置与尺寸',preset:'预设位置',width:'宽度',height:'高度',offsetX:'预设 X 偏移',offsetY:'预设 Y 偏移',customX:'自定义绝对 X',customY:'自定义绝对 Y',top_left:'左上',top_center:'顶部居中',top_right:'右上',center_left:'左侧居中',center:'居中',center_right:'右侧居中',bottom_left:'左下',bottom_center:'底部居中',bottom_right:'右下',custom:'自定义绝对位置'},typography:{title:'字体排版',refreshFonts:'刷新已安装字体',font:'字体名称',size:'字号',align:'文字对齐',left:'左对齐',center:'居中',right:'右对齐'},appearance:{title:'颜色与效果',textOpacity:'文字不透明度',backgroundOpacity:'背景不透明度',backgroundColor:'背景颜色',textColor:'正文颜色',mutedColor:'辅助文字颜色',borderColor:'边框颜色',shadowColor:'阴影颜色',outlineColor:'描边颜色',errorColor:'错误颜色',shadow:'启用文字阴影',shadowOffset:'阴影偏移',outline:'启用文字描边',outlineWidth:'描边宽度'},behavior:{title:'内容与行为',enabled:'启用原生字幕',close:'自动关闭时间（秒）',mode:'字幕内容模式',dialogue:'仅配置的对话字段',all:'所有响应文字',fields:'对话字段名（逗号分隔）',fallback:'启用纯文本回退',reasoning:'显示推理文字',clickThrough:'鼠标穿透',forceStream:'为字幕更新强制上游流式传输'} },
 }
 
 export default zhCN

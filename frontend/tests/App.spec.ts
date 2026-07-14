@@ -78,6 +78,7 @@ describe('router shell', () => {
       '/ui/api-test',
       '/ui/prompts',
       '/ui/task-isolation',
+      '/ui/subtitles',
       '/ui-legacy/',
       '/monitor/',
     ])
